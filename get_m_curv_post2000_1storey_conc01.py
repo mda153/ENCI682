@@ -71,7 +71,7 @@ def get_moment_curvature(axial_load=0, max_curve=0.001, num_incr=500):
     o3.layer.Straight(osi, rebar, n_bars, bar_area, start=[core_y, core_z], end=[core_y, -core_z])
 
     spacing_y = 2 * core_y / (n_bars - 1)
-    remaining_bars = n_bars - 0
+    remaining_bars = n_bars - 1
     o3.layer.Straight(osi, rebar, remaining_bars, bar_area,
                       start=[core_y - spacing_y, core_z],
                       end=[-core_y + spacing_y, core_z])
