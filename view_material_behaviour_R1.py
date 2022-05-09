@@ -22,12 +22,12 @@ def add_unconf_concrete_to_plot(ax, fpc, espall, eps_unconf_conc_max, eps_conc_c
 
     #eps_conc_crush = 0.003  # Concrte strain at crushing - Koopaee (2015) from NZS 3101?? taken from Fig 2.1 fc=20MPa curve
 
-    conc_unconf = o3.uniaxial_material.Concrete04(osi, fc=-fpc*0.8, epsc=-eps_unconf_conc_max, epscu=-eps_conc_crush_unconf,
-                                                  ec=Ec, fct=1.4, et=0)  # unconfined concrete properties
+    conc_unconf = o3.uniaxial_material.Concrete04(osi, fc=-fpc, epsc=-eps_unconf_conc_max, epscu=-eps_conc_crush_unconf,
+                                                  ec=Ec, fct=0, et=0)  # unconfined concrete properties
     # conc_unconf = o3.uniaxial_material.Concrete01(osi, fpc=-f_c28 * 0.8, epsc0=-eps_unconf_conc_max, fpcu=0.0,
     #                                               eps_u=-eps_conc_crush)
     peak_disps = np.array([-0.0001, -0.00005, -0.001])
-    peak_disps = np.array([-0.005])
+    peak_disps = np.array([-0.01])
     rec_d = 0.00001
     disps = []
     init = 0
@@ -52,9 +52,9 @@ def add_conf_concrete_to_plot(ax, fpc, eps_conf_conc_max, eps_conc_crush_conf, E
     #eps_conc_crush_conf = 0.02
 
     conc_conf = o3.uniaxial_material.Concrete04(osi, fc=-fpc, epsc=-eps_conf_conc_max, epscu=-eps_conc_crush_conf,
-                                                  ec=Ec, fct=1.4, et=0)  # Confined concrete paramters
+                                                  ec=Ec, fct=0, et=0)  # Confined concrete paramters
     peak_disps = np.array([-0.0001, -0.00005, -0.001])
-    peak_disps = np.array([-0.005])
+    peak_disps = np.array([-0.01])
     rec_d = 0.00001
     disps = []
     init = 0
@@ -70,9 +70,9 @@ def add_rebar_to_plot(ax, fy, Es, label="Rebar"):
     osi = o3.OpenSeesInstance(ndm=1, ndf=1, state=3)
     #fy = 300 * 1E3  # [kPa] steel yield strength
     #Es = 200 * 1E6  # [kPa] youngs modulus - steel
-    rebar = o3.uniaxial_material.Steel01(osi, fy=fy, e0=Es, b=0.001)  # Reinforcing steel
+    rebar = o3.uniaxial_material.Steel01(osi, fy=fy, e0=Es, b=0.01)  # Reinforcing steel
     peak_disps = np.array([-0.0001, -0.00005, -0.001])
-    peak_disps = np.array([-0.005])
+    peak_disps = np.array([-0.01])
     rec_d = 0.00001
     disps = []
     init = 0
@@ -151,9 +151,9 @@ def create():
     #Mander inputs - also used in opensees inputs
     fpc = 17 #Conc compressive strength (MPa)
     eps_unconf_conc_max = 0.002 # Ultimate strain for unconfined concrete Priestly et al. 2007, lower bound (0.004 - 0.005)
-    eps_conf_conc_max = 0.005 
-    eps_conc_crush_unconf = 0.006 # Concrte strain at crushing unconf.
-    eps_conc_crush_conf = 0.01 #conf conc strain at crushing conf.
+    eps_conf_conc_max = 0.002
+    eps_conc_crush_unconf = 0.004 # Concrte strain at crushing unconf.
+    eps_conc_crush_conf = 0.03 #conf conc strain at crushing conf.
     Ec = 5000*np.sqrt(fpc) #Conc modulus of elasticity (MPa) in Mander script for auto calc
     Ast = 452.3893421 #Total area of longtitudinal steel
     Dh = 6 #diameter of transverse reinforcement (mm)
@@ -194,4 +194,6 @@ def create():
 
 if __name__ == '__main__':
     create() #running the create function first, then runs the other ones
+
+
 
