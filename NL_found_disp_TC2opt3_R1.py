@@ -1,11 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Jun 30 15:03:54 2022
-
-@author: mda153
-"""
-
-# -*- coding: utf-8 -*-
 """
 Created on Mon Mar  7 12:51:03 2022
 
@@ -16,7 +8,9 @@ import o3seespy as o3
 import numpy as np
 import matplotlib.pyplot as plt
 import o3seespy.extensions
-from loc_o3fibre import get_rc_fibre_section
+import sfsimodels as sm
+
+
 
 def get_moment_curvature(axial_load, max_curve, num_incr):
     osi = o3.OpenSeesInstance(ndm=2, ndf=3, state=3)
@@ -164,13 +158,108 @@ def get_moment_curvature(axial_load, max_curve, num_incr):
     moment = -nm.collect()
     print(moment)
     print(curvature)
-    return moment, curvature, d, b, Ec, sect ,conc_conf, conc_unconf, rebar, nf_core_y, nf_core_z, nf_cover_y, nf_cover_z
+    return moment, curvature, d, b, Ec, conc_conf, conc_unconf, rebar, nf_core_y, nf_core_z, nf_cover_y, nf_cover_z
+
+def get_rc_fibre_section(osi, conc_conf, conc_unconf, rebar, nf_core_y, nf_core_z, nf_cover_y, nf_cover_z):
+    """
+
+    y - vertical
+    z - horizontal
+
+    :param osi:
+    :param ele_nodes:
+    :param sm_sect:
+    :param conc_conf_mat:
+    :param conc_unconf_mat:
+    :param rebar_mat:
+    :param nf_core_y:
+    :param nf_core_z:
+    :param nf_cover_y:
+    :param nf_cover_z:
+    :return:
+    """
+    import numpy as np
+    
+    col_sect = sm.sections.RCDetailedSection(depth=0.45, width=0.35)
+    col_sect.layer_depths = [0.06, 0.2, 0.34]
+    col_sect.bar_diams = [[0.025, 0.025, 0.025], [0.025, 0.025], [0.025, 0.025, 0.025]]
+    col_sect.bar_centres = [[0.06, 0.2, 0.34], [0.06, 0.34], [0.06, 0.2, 0.34]]
+    rc_mat = sm.materials.ReinforcedConcreteMaterial(fc=30e6, fy=300e6,
+                                                      e_mod_steel=200e9, poissons_ratio=0.18)
+    print(1)
+    area_steel = 0.025 ** 2 / 4 * np.pi * 8
+    a_sect = col_sect.depth * col_sect.width
+    rho_steel = area_steel / a_sect
+    print('rho_steel: ', rho_steel)
+    col_sect.rc_mat = rc_mat
+    print(2)
+
+    sm_sect = col_sect
+    print(sm_sect)
+    
+    
+
+    edge_y = sm_sect.depth / 2.0
+    edge_z = sm_sect.width / 2.0
+    core_y = edge_y - sm_sect.cover_h
+    core_z = edge_z - sm_sect.cover_w
+
+    if hasattr(sm_sect, 'gj'):
+        gj = sm_sect.gj
+    else:
+        gj = None
+    sect = o3.section.Fiber(osi, gj=gj)
+    # define the core patch
+    o3.patch.Quad(osi, conc_conf, nf_core_z, nf_core_y,  # core, counter-clockwise (diagonals at corners)
+                  crds_i=[-core_y, core_z],
+                  crds_j=[-core_y, -core_z],
+                  crds_k=[core_y, -core_z],
+                  crds_l=[core_y, core_z])
+
+    o3.patch.Quad(osi, conc_unconf, 1, nf_cover_y,  # right cover, counter-clockwise (diagonals at corners)
+                  crds_i=[-edge_y, edge_z],
+                  crds_j=[-core_y, core_z],
+                  crds_k=[core_y, core_z],
+                  crds_l=[edge_y, edge_z])
+    o3.patch.Quad(osi, conc_unconf, 1, nf_cover_y,  # left cover
+                  crds_i=[-core_y, -core_z],
+                  crds_j=[-edge_y, -edge_z],
+                  crds_k=[edge_y, -edge_z],
+                  crds_l=[core_y, -core_z])
+    o3.patch.Quad(osi, conc_unconf, nf_cover_z, 1,  # bottom cover
+                  crds_i=[-edge_y, edge_z],
+                  crds_j=[-edge_y, -edge_z],
+                  crds_k=[-core_y, -core_z],
+                  crds_l=[-core_y, core_z])
+    o3.patch.Quad(osi, conc_unconf, nf_cover_z, 1,  # top cover
+                  crds_i=[core_y, core_z],
+                  crds_j=[core_y, -core_z],
+                  crds_k=[edge_y, -edge_z],
+                  crds_l=[edge_y, edge_z])
+    _pi = 3.14159265
+    indiv = 0
+    if indiv:
+        for k in range(len(sm_sect.layer_depths)):
+            n_bars = len(sm_sect.bar_centres[k])
+            y_pos = sm_sect.layer_depths[k] - sm_sect.depth / 2
+            for i in range(n_bars):
+                area = sm_sect.bar_diams[k][i] ** 2 / 4 *_pi
+                o3.section.gen_fibre_section(osi, y_pos, z_loc=sm_sect.bar_centres[k][i], area=area, mat=rebar)
+    else:
+        import numpy as np
+        for k in range(len(sm_sect.layer_depths)):
+            n_bars = len(sm_sect.bar_centres[k])
+            bar_area = np.mean(sm_sect.bar_diams[k]) ** 2 / 4 * _pi
+            y_pos = sm_sect.layer_depths[k] - sm_sect.depth / 2
+            o3.layer.Straight(osi, rebar, n_bars, bar_area, start=[y_pos, core_z], end=[y_pos, -core_z])
+    return sect
+    
 
 
 
 if __name__ == '__main__':
 
-    mom, curve, d, b, Ec,sect,conc_conf, conc_unconf, rebar, nf_core_y, nf_core_z, nf_cover_y, nf_cover_z = get_moment_curvature(axial_load=0,max_curve=0.002,num_incr=500)
+    mom, curve, d, b, Ec, conc_conf, conc_unconf, rebar, nf_core_y, nf_core_z, nf_cover_y, nf_cover_z = get_moment_curvature(axial_load=0,max_curve=0.002,num_incr=500)
     plt.plot(curve*1000, mom/1000/1000)
     plt.grid()
     axes = plt.axes()
@@ -204,7 +293,7 @@ def run(lf=10, dx=0.5, xd=(3,7), yd=(-0.2,-0.2), ksoil=2.5e3, udl=0.03e3, axial_
         (y0, y1) displacements of section of soil at x0 and x1 (note should be -ve)
     :return:
     """
-    moment, curvature, d, b, Ec,sect ,conc_conf, conc_unconf, rebar, nf_core_y, nf_core_z, nf_cover_y, nf_cover_z = get_moment_curvature(axial_load, max_curve, num_incr)
+    moment, curvature, d, b, Ec, conc_conf, conc_unconf, rebar, nf_core_y, nf_core_z, nf_cover_y, nf_cover_z = get_moment_curvature(axial_load, max_curve, num_incr)
     print(moment)
     print(curvature)
     print(d)
@@ -242,8 +331,8 @@ def run(lf=10, dx=0.5, xd=(3,7), yd=(-0.2,-0.2), ksoil=2.5e3, udl=0.03e3, axial_
             e_mod = Ec  # Pa
             area = s_width * s_depth
             i_z = s_depth ** 3 * s_width / 12
-            bot_sect = o3.section.Elastic2D(osi, e_mod, area, i_z)
-            # bot_sect = get_moment_curvature(osi, sect ,conc_conf, conc_unconf, rebar, nf_core_y, nf_core_z, nf_cover_y, nf_cover_z)
+            # bot_sect = o3.section.Elastic2D(osi, e_mod, area, i_z)
+            bot_sect = get_rc_fibre_section(osi, conc_conf, conc_unconf, rebar, nf_core_y, nf_core_z, nf_cover_y, nf_cover_z)
             integ = o3.beam_integration.Lobatto(osi, bot_sect, big_n=5) 
             # fd_eles.append(o3.element.ElasticBeamColumn2D(osi, [fd_nds[i], fd_nds[i-1]], area=area, e_mod=e_mod,
             #                                               iz=i_z, transf=transf))
@@ -320,6 +409,14 @@ def run(lf=10, dx=0.5, xd=(3,7), yd=(-0.2,-0.2), ksoil=2.5e3, udl=0.03e3, axial_
     plt.legend()
     plt.show()
     
+    
+    o3.extensions.to_py_file(osi) #Stress strain recorder for fibre sections
+    for i in range(30):
+        print(1, i, o3.get_ele_response(osi, vert_ele, 'stressStrain', extra_args=['section', '1', 'fiber', f'{i}']))
+    for i in range(30):
+        print(2, i, o3.get_ele_response(osi, vert_ele, 'stressStrain', extra_args=['section', '2', 'fiber', f'{i}']))
+    return np.array(rot_hinge), np.array(mom_hinge), np.array(col_top_xdisp), np.array(applied_load), np.array(col_top_ydisp)
+
 
 
 
