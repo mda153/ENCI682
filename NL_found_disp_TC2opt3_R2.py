@@ -185,6 +185,10 @@ def get_rc_fibre_section(osi, conc_conf, conc_unconf, rebar, nf_core_y, nf_core_
     col_sect.bar_centres = [[0.06, 0.2, 0.34], [0.06, 0.34], [0.06, 0.2, 0.34]]
     rc_mat = sm.materials.ReinforcedConcreteMaterial(fc=30e6, fy=300e6,
                                                       e_mod_steel=200e9, poissons_ratio=0.18)
+    fy = 300 #MPa
+    Es = 205000 #Steel modulus [MPa]
+    
+    rebar = o3.uniaxial_material.Steel01(osi, fy=fy, e0=Es, b=0.01)  # Reinforcing steel
     print(1)
     area_steel = 0.025 ** 2 / 4 * np.pi * 8
     a_sect = col_sect.depth * col_sect.width
