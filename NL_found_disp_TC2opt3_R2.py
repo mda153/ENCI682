@@ -1,3 +1,4 @@
+"""
 Created on Mon Mar  7 12:51:03 2022
 
 @author: mda153
@@ -274,7 +275,7 @@ def get_rc_fibre_section(osi, conc_conf, conc_unconf, rebar, nf_core_y, nf_core_
 #     plt.show()
 
 
-def run(lf=10, dx=0.5, xd=(3,7), yd=(-0.2,-0.2), ksoil=2.5e3, udl=0.03e3, axial_load=0, max_curve=0.003, num_incr=500):
+def run(lf, dx, xd, yd, ksoil, udl, axial_load, max_curve, num_incr, stype="rc"):
     """
     Run an analysis imposing a uniform load, on a foundation with soil springs
 
@@ -321,12 +322,22 @@ def run(lf=10, dx=0.5, xd=(3,7), yd=(-0.2,-0.2), ksoil=2.5e3, udl=0.03e3, axial_
     sl_nds = []  # soil nodes
     sl_eles = []
     fd_eles = []
+    spring_mats = []
     "Soil Nodes"
     for i in range(len(nx)):
         fd_nds.append(o3.node.Node(osi, nx[i], 0.0))
         sl_nds.append(o3.node.Node(osi, nx[i], 0.0))
         o3.Mass(osi, fd_nds[-1], 1.0, 1.0, 1.0)
-        mat = o3.uniaxial_material.ElasticPP(osi, ks[i], 1*py[i] / ks[i], 0.001 * py[i] / ks[i]) #remove tension capacity
+        
+        dettach = 1
+        mat_base = o3.uniaxial_material.ElasticPP(osi, ks[i], 1*py[i] / ks[i], 0.001 * py[i] / ks[i]) #low tension stiffness
+        if dettach:
+            mat_obj2 = o3.uniaxial_material.Elastic(osi, 1000 * ks[i], eneg=0.0001 * ks[i])
+            mat = o3.uniaxial_material.Series(osi, [mat_base, mat_obj2])
+        else:
+            spring_mats.append(mat_base)
+        
+        mat = o3.uniaxial_material.ElasticPP(osi, ks[i], 1*py[i] / ks[i], 1 * py[i] / ks[i]) #remove tension capacity
         #mat = o3.uniaxial_material.Elastic(osi, ks[i])
         sl_eles.append(o3.element.ZeroLength(osi, [fd_nds[-1], sl_nds[-1]], mats=[mat], dirs=[o3.cc.Y]))
         "Foundation nodes"
@@ -334,12 +345,17 @@ def run(lf=10, dx=0.5, xd=(3,7), yd=(-0.2,-0.2), ksoil=2.5e3, udl=0.03e3, axial_
             e_mod = Ec  # Pa
             area = s_width * s_depth
             i_z = s_depth ** 3 * s_width / 12
-            # bot_sect = o3.section.Elastic2D(osi, e_mod, area, i_z)
-            bot_sect = get_rc_fibre_section(osi, conc_conf, conc_unconf, rebar, nf_core_y, nf_core_z, nf_cover_y, nf_cover_z)
-            integ = o3.beam_integration.Lobatto(osi, bot_sect, big_n=5) 
-            # fd_eles.append(o3.element.ElasticBeamColumn2D(osi, [fd_nds[i], fd_nds[i-1]], area=area, e_mod=e_mod,
-            #                                               iz=i_z, transf=transf))
-            fd_eles.append(o3.element.DispBeamColumn(osi, [fd_nds[i], fd_nds[i-1]], transf=transf, integration=integ))
+            
+            if stype == "elastic":
+                bot_sect = o3.section.Elastic2D(osi, e_mod, area, i_z)
+                integ = o3.beam_integration.Lobatto(osi, bot_sect, big_n=5) 
+                fd_eles.append(o3.element.ElasticBeamColumn2D(osi, [fd_nds[i], fd_nds[i-1]], area=area, e_mod=e_mod, iz=i_z, transf=transf))
+                
+            if stype == "rc":
+                bot_sect = get_rc_fibre_section(osi, conc_conf, conc_unconf, rebar, nf_core_y, nf_core_z, nf_cover_y, nf_cover_z)
+                integ = o3.beam_integration.Lobatto(osi, bot_sect, big_n=5) 
+                fd_eles.append(o3.element.DispBeamColumn(osi, [fd_nds[i], fd_nds[i-1]], transf=transf, integration=integ))
+            
         
 
 
@@ -400,17 +416,19 @@ def run(lf=10, dx=0.5, xd=(3,7), yd=(-0.2,-0.2), ksoil=2.5e3, udl=0.03e3, axial_
             ndisps[-1].append(o3.get_node_disp(osi, fd_nds[j], dof=o3.cc.Y))
         print('y_disps: ', [f'{dy:.3}' for dy in ndisps[-1]])
         
-    print(nx)
-    plt.plot(nx, ndisps[0], label='Initial Foundation')
-    plt.plot(nx, ndisps[49], label='Foundation @ 50%')
-    plt.plot(nx, ndisps[99], label='Foundation @ 100%')
-    plt.plot([xd0n, xd1n], [yd0, yd1], c='k', label='Imposed')
-    plt.xlabel('Foundation Length (m)')
-    plt.ylabel('Vertical Displacement (m)')
-    plt.grid()
+    return nx, ndisps, xd0n,xd1n, yd0, yd1
+        
+    # print(nx)
+    # plt.plot(nx, ndisps[0], label='Initial Foundation')
+    # plt.plot(nx, ndisps[49], label='Foundation @ 50%')
+    # plt.plot(nx, ndisps[99], label='Foundation @ 100%')
+    # plt.plot([xd0n, xd1n], [yd0, yd1], c='k', label='Imposed')
+    # plt.xlabel('Foundation Length (m)')
+    # plt.ylabel('Settlement (m)')
+    # plt.grid()
 
-    plt.legend()
-    plt.show()
+    # plt.legend()
+    # plt.show()
     
     
     # o3.extensions.to_py_file(osi) #Stress strain recorder for fibre sections
@@ -419,6 +437,28 @@ def run(lf=10, dx=0.5, xd=(3,7), yd=(-0.2,-0.2), ksoil=2.5e3, udl=0.03e3, axial_
     # for i in range(30):
     #     print(2, i, o3.get_ele_response(osi, vert_ele, 'stressStrain', extra_args=['section', '2', 'fiber', f'{i}']))
     # return np.array(rot_hinge), np.array(mom_hinge), np.array(col_top_xdisp), np.array(applied_load), np.array(col_top_ydisp)
+    
+def create():
+    
+    
+    nx_elastic, ndisps_elastic, xd0n_elastic, xd1n_elastic, yd0_elastic, yd1_elastic = run(lf=10, dx=0.5, xd=(3,7), yd=(-0.1,-0.1), ksoil=2.5e3, udl=0.03e3, axial_load=0, max_curve=0.003, num_incr=500, stype="elastic")
+    nx_rc, ndisps_rc, xd0n_rc, xd1n_rc, yd0_rc, yd1_rc = run(lf=10, dx=0.5, xd=(3,7), yd=(-0.1,-0.1), ksoil=2.5e3, udl=0.03e3, axial_load=0, max_curve=0.003, num_incr=500, stype="rc")
+
+    plt.plot(nx_elastic, ndisps_elastic[0], label='Initial Linear', c="b")
+    plt.plot(nx_elastic, ndisps_elastic[49], label='Linear @ 50%', c="b")
+    plt.plot(nx_elastic, ndisps_elastic[99], label='Linear @ 100%', c="b")
+    # plt.plot([xd0n_elastic, xd1n_elastic], [yd0_elastic, yd1_elastic], c='r', label='Imposed')
+    
+    plt.plot(nx_rc, ndisps_rc[0], label='Initial Non-Linear', c="k")
+    plt.plot(nx_rc, ndisps_rc[49], label='Non-Linear @ 50%', c="k")
+    plt.plot(nx_rc, ndisps_rc[99], label='Non-Linear @ 100%', c="k")
+    plt.plot([xd0n_rc, xd1n_rc], [yd0_rc, yd1_rc], c='r', label='Imposed')
+    plt.xlabel('Foundation Length (m)')
+    plt.ylabel('Settlement (m)')
+    plt.grid()
+
+    plt.legend()
+    plt.show()
 
 
 
@@ -426,16 +466,17 @@ def run(lf=10, dx=0.5, xd=(3,7), yd=(-0.2,-0.2), ksoil=2.5e3, udl=0.03e3, axial_
 
 if __name__ == '__main__':
     
-    "get_moment_curvature function"
-    mom, curve, d, b, Ec, conc_conf, conc_unconf, rebar, nf_core_y, nf_core_z, nf_cover_y, nf_cover_z = get_moment_curvature(axial_load=0,max_curve=0.002,num_incr=500)
-    plt.plot(curve*1000, mom/1000/1000)
-    plt.grid()
-    axes = plt.axes()
-    axes.set_xlabel("Curvature [1/m]")
-    axes.set_ylabel("Moment [kNm]")
+    # "get_moment_curvature function"
+    # mom, curve, d, b, Ec, conc_conf, conc_unconf, rebar, nf_core_y, nf_core_z, nf_cover_y, nf_cover_z = get_moment_curvature(axial_load=0,max_curve=0.002,num_incr=500)
+    # plt.plot(curve*1000, mom/1000/1000)
+    # plt.grid()
+    # axes = plt.axes()
+    # axes.set_xlabel("Curvature [1/m]")
+    # axes.set_ylabel("Moment [kNm]")
     
-    plt.show()
+    # plt.show()
     
     
     "Impose foundation displacement function"
-    run(lf=10, dx=0.5)
+    create()
+    # run(lf=10, dx=0.5)
