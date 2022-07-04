@@ -1,12 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Jun 30 15:03:54 2022
-
-@author: mda153
-"""
-
-# -*- coding: utf-8 -*-
-"""
 Created on Mon Mar  7 12:51:03 2022
 
 @author: mda153
@@ -265,18 +256,18 @@ def get_rc_fibre_section(osi, conc_conf, conc_unconf, rebar, nf_core_y, nf_core_
 
 
 
-if __name__ == '__main__':
+# if __name__ == '__main__':
 
-    mom, curve, d, b, Ec, conc_conf, conc_unconf, rebar, nf_core_y, nf_core_z, nf_cover_y, nf_cover_z = get_moment_curvature(axial_load=0,max_curve=0.002,num_incr=500)
-    plt.plot(curve*1000, mom/1000/1000)
-    plt.grid()
-    axes = plt.axes()
-    axes.set_xlabel("Curvature [1/m]")
-    axes.set_ylabel("Moment [kNm]")
+#     mom, curve, d, b, Ec, conc_conf, conc_unconf, rebar, nf_core_y, nf_core_z, nf_cover_y, nf_cover_z = get_moment_curvature(axial_load=0,max_curve=0.002,num_incr=500)
+#     plt.plot(curve*1000, mom/1000/1000)
+#     plt.grid()
+#     axes = plt.axes()
+#     axes.set_xlabel("Curvature [1/m]")
+#     axes.set_ylabel("Moment [kNm]")
     
     
 
-    plt.show()
+#     plt.show()
 
 
 def run(lf=10, dx=0.5, xd=(3,7), yd=(-0.2,-0.2), ksoil=2.5e3, udl=0.03e3, axial_load=0, max_curve=0.003, num_incr=500):
@@ -418,16 +409,29 @@ def run(lf=10, dx=0.5, xd=(3,7), yd=(-0.2,-0.2), ksoil=2.5e3, udl=0.03e3, axial_
     plt.show()
     
     
-    o3.extensions.to_py_file(osi) #Stress strain recorder for fibre sections
-    for i in range(30):
-        print(1, i, o3.get_ele_response(osi, vert_ele, 'stressStrain', extra_args=['section', '1', 'fiber', f'{i}']))
-    for i in range(30):
-        print(2, i, o3.get_ele_response(osi, vert_ele, 'stressStrain', extra_args=['section', '2', 'fiber', f'{i}']))
-    return np.array(rot_hinge), np.array(mom_hinge), np.array(col_top_xdisp), np.array(applied_load), np.array(col_top_ydisp)
+    # o3.extensions.to_py_file(osi) #Stress strain recorder for fibre sections
+    # for i in range(30):
+    #     print(1, i, o3.get_ele_response(osi, vert_ele, 'stressStrain', extra_args=['section', '1', 'fiber', f'{i}']))
+    # for i in range(30):
+    #     print(2, i, o3.get_ele_response(osi, vert_ele, 'stressStrain', extra_args=['section', '2', 'fiber', f'{i}']))
+    # return np.array(rot_hinge), np.array(mom_hinge), np.array(col_top_xdisp), np.array(applied_load), np.array(col_top_ydisp)
 
 
 
 
 
 if __name__ == '__main__':
+    
+    "get_moment_curvature function"
+    mom, curve, d, b, Ec, conc_conf, conc_unconf, rebar, nf_core_y, nf_core_z, nf_cover_y, nf_cover_z = get_moment_curvature(axial_load=0,max_curve=0.002,num_incr=500)
+    plt.plot(curve*1000, mom/1000/1000)
+    plt.grid()
+    axes = plt.axes()
+    axes.set_xlabel("Curvature [1/m]")
+    axes.set_ylabel("Moment [kNm]")
+    
+    plt.show()
+    
+    
+    "Impose foundation displacement function"
     run(lf=10, dx=0.5)
