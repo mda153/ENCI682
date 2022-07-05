@@ -55,7 +55,7 @@ def run(lf=10, dx=0.5, s_depth=0.5, xd=(0,2), yd=(-1,-1), ksoil=2.5e3, udl=0.03e
         fd_nds.append(o3.node.Node(osi, nx[i], 0.0))
         sl_nds.append(o3.node.Node(osi, nx[i], 0.0))
         o3.Mass(osi, fd_nds[-1], 1.0, 1.0, 1.0)
-        mat = o3.uniaxial_material.ElasticPP(osi, ks[i], 1*py[i] / ks[i], 0.001 * py[i] / ks[i]) #remove tension capacity
+        mat = o3.uniaxial_material.ElasticPP(osi, ks[i], 1*py[i] / ks[i], -0.001 * py[i] / ks[i]) #remove tension capacity
         #mat = o3.uniaxial_material.Elastic(osi, ks[i])
         sl_eles.append(o3.element.ZeroLength(osi, [fd_nds[-1], sl_nds[-1]], mats=[mat], dirs=[o3.cc.Y]))
         if i != 0:
@@ -115,15 +115,20 @@ def run(lf=10, dx=0.5, s_depth=0.5, xd=(0,2), yd=(-1,-1), ksoil=2.5e3, udl=0.03e
     for j in range(nnodes):
         ndisps[0].append(o3.get_node_disp(osi, fd_nds[j], dof=o3.cc.Y))
     for i in range(100):
-        o3.analyze(osi, 1)
+        fail = o3.analyze(osi, 1)
+        if fail:
+            raise ValueError()
         ndisps.append([])
         for j in range(nnodes):
             ndisps[-1].append(o3.get_node_disp(osi, fd_nds[j], dof=o3.cc.Y))
         print('y_disps: ', [f'{dy:.3}' for dy in ndisps[-1]])
+        y_disp_max = o3.get_node_disp(osi, sl_nds[max_ind], dof=o3.cc.Y)
+        if -y_disp_max > -ymin:
+            break
 
     plt.plot(nx, ndisps[0], label='Initial Foundation')
-    plt.plot(nx, ndisps[49], label='Foundation @ 50%')
-    plt.plot(nx, ndisps[99], label='Foundation @ 100%')
+    plt.plot(nx, ndisps[int(len(ndisps) / 2)], label='Foundation @ 50%')
+    plt.plot(nx, ndisps[-1], label='Foundation @ 100%')
     plt.plot([xd0n, xd1n], [yd0, yd1], c='k', label='Imposed')
     plt.legend()
     plt.show()
