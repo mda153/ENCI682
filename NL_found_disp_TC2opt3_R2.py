@@ -105,8 +105,8 @@ def get_rc_fibre_section(osi, conc_conf, conc_unconf, rebar, nf_core_y, nf_core_
 
 def run(lf, dx, xd, yd, ksoil, udl, axial_load, max_curve, num_incr, stype="rc"):
     print('running: ', stype)
-    d = 600  # section depth (mm)
-    b = 300  # section width (mm)
+    d = 0.600  # section depth (mm)
+    b = 0.300  # section width (mm)
 
     # Mander inputs - also used in opensees inputs - From View Material Behavior Script
     fpc = 30  # Conc compressive strength (MPa)
@@ -168,10 +168,11 @@ def run(lf, dx, xd, yd, ksoil, udl, axial_load, max_curve, num_incr, stype="rc")
         sl_nds.append(o3.node.Node(osi, nx[i], 0.0))
         o3.Mass(osi, fd_nds[-1], 1.0, 1.0, 1.0)
 
-        dettach = 0
+        dettach = 1
         mat_base = o3.uniaxial_material.ElasticPP(osi, 1*ks[i], 1*py[i] / ks[i], -1 * py[i] / ks[i]) #low tension stiffness
         if dettach:
             mat_obj2 = o3.uniaxial_material.Elastic(osi, 1000 * ks[i], eneg=0.001 * ks[i])
+            # mat_obj2 = o3.uniaxial_material.Elastic(osi, 0.001 * ks[i], eneg=1000 * ks[i])
             mat = o3.uniaxial_material.Series(osi, [mat_base, mat_obj2])
         else:
             mat = o3.uniaxial_material.ElasticPP(osi, ks[i], 1*py[i] / ks[i], -1 * py[i] / ks[i]) #remove tension capacity
@@ -239,12 +240,13 @@ def run(lf, dx, xd, yd, ksoil, udl, axial_load, max_curve, num_incr, stype="rc")
         o3.SP(osi, sl_nds[i], o3.cc.Y, [ydi])  # impose displacement
     ymin = min([yd0, yd1])
     max_ind = [ind0, ind1][np.argmin([yd0, yd1])]  # use the node that has the largest displacement
-    fd_incs = ymin / 100000
+    max_steps = 1000
+    fd_incs = ymin / max_steps
     o3.integrator.DisplacementControl(osi, fd_nds[max_ind], dof=o3.cc.Y, incr=fd_incs, num_iter=100) #change back to incr=ymin/100
     ndisps = [[]]
     for j in range(nnodes):
         ndisps[0].append(o3.get_node_disp(osi, fd_nds[j], dof=o3.cc.Y))
-    for i in range(1000):
+    for i in range(max_steps + 20):
         fail = o3.analyze(osi, 1)
         if fail:
             raise ValueError()
@@ -310,12 +312,12 @@ def create(): #creates plot
     plt.plot(nx_elastic, ndisps_elastic[0], label='Initial', c="g")
     plt.plot(nx_elastic, ndisps_elastic[int(len(ndisps_elastic) / 2)], label='Linear @ 50%', c="b", ls = "--")
     plt.plot(nx_elastic, ndisps_elastic[-1], label='Linear @ 100%', c="b")
-    plt.plot([xd0n_elastic, xd1n_elastic], [yd0_elastic, yd1_elastic], c='r', label='Imposed')
+    # plt.plot([xd0n_elastic, xd1n_elastic], [yd0_elastic, yd1_elastic], c='r', label='Imposed')
 
-    # plt.plot(nx_rc, ndisps_rc[0], label='Initial', c="k", ls="-.")
-    # plt.plot(nx_rc, ndisps_rc[49], label='Non-Linear @ 50%', c="k", ls="--")
-    # plt.plot(nx_rc, ndisps_rc[-1], label='Non-Linear @ 100%', c="k")
-    # plt.plot([xd0n_rc, xd1n_rc], [yd0_rc, yd1_rc], c='r', label='Imposed')
+    plt.plot(nx_rc, ndisps_rc[0], label='Initial', c="k", ls="-.")
+    plt.plot(nx_rc, ndisps_rc[int(len(ndisps_elastic) / 2)], label='Non-Linear @ 50%', c="k", ls="--")
+    plt.plot(nx_rc, ndisps_rc[-1], label='Non-Linear @ 100%', c="k")
+    plt.plot([xd0n_rc, xd1n_rc], [yd0_rc, yd1_rc], c='r', label='Imposed')
     plt.xlabel('Foundation Length (m)')
     plt.ylabel('Settlement (m)')
     plt.grid()

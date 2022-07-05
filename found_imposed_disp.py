@@ -55,7 +55,16 @@ def run(lf=10, dx=0.5, s_depth=0.5, xd=(0,2), yd=(-1,-1), ksoil=2.5e3, udl=0.03e
         fd_nds.append(o3.node.Node(osi, nx[i], 0.0))
         sl_nds.append(o3.node.Node(osi, nx[i], 0.0))
         o3.Mass(osi, fd_nds[-1], 1.0, 1.0, 1.0)
-        mat = o3.uniaxial_material.ElasticPP(osi, ks[i], 1*py[i] / ks[i], -0.001 * py[i] / ks[i]) #remove tension capacity
+        dettach = 1
+        mat_base = o3.uniaxial_material.ElasticPP(osi, 1 * ks[i], 1 * py[i] / ks[i],
+                                                  -1 * py[i] / ks[i])  # low tension stiffness
+        if dettach:
+            mat_obj2 = o3.uniaxial_material.Elastic(osi, 1000 * ks[i], eneg=0.001 * ks[i])
+            # mat_obj2 = o3.uniaxial_material.Elastic(osi, 0.001 * ks[i], eneg=1000 * ks[i])
+            mat = o3.uniaxial_material.Series(osi, [mat_base, mat_obj2])
+        else:
+            mat = o3.uniaxial_material.ElasticPP(osi, ks[i], 1 * py[i] / ks[i], -1 * py[i] / ks[i])
+        # mat = o3.uniaxial_material.ElasticPP(osi, ks[i], 1*py[i] / ks[i], -0.001 * py[i] / ks[i]) #remove tension capacity
         #mat = o3.uniaxial_material.Elastic(osi, ks[i])
         sl_eles.append(o3.element.ZeroLength(osi, [fd_nds[-1], sl_nds[-1]], mats=[mat], dirs=[o3.cc.Y]))
         if i != 0:
@@ -92,7 +101,7 @@ def run(lf=10, dx=0.5, s_depth=0.5, xd=(0,2), yd=(-1,-1), ksoil=2.5e3, udl=0.03e
         ndisps.append(o3.get_node_disp(osi, fd_nds[i], dof=o3.cc.Y))
     print('y_disps: ', [f'{dy:.3}' for dy in ndisps])
     assert np.isclose(min(ndisps), max(ndisps)), (min(ndisps), max(ndisps), -udl / ksoil)
-    assert np.isclose(min(ndisps), -udl / ksoil), (min(ndisps), max(ndisps), -udl / ksoil)
+    assert np.isclose(min(ndisps), -udl / ksoil, rtol=0.001), (min(ndisps), max(ndisps), -udl / ksoil)
 
     ts0 = o3.time_series.Linear(osi, factor=1)
     o3.pattern.Plain(osi, ts0)
