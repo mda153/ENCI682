@@ -120,10 +120,12 @@ if __name__ == '__main__':
     import matplotlib.pyplot as plt
 
     mom, curve = get_moment_curvature()
-    plt.plot(curve, mom)
-    axes = plt.axes()
-    axes.set_xlabel("Curvature [1/in^2]")
-    axes.set_ylabel("Bending Moment [kip*in]")
+
+    # axes = plt.axes()
+    bf, ax = plt.subplots()
+    ax.plot(curve, mom)
+    ax.set_xlabel("Curvature [1/in^2]")
+    ax.set_ylabel("Bending Moment [kip*in]")
     
     
 

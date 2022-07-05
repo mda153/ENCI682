@@ -187,12 +187,14 @@ def run(lf, dx, xd, yd, ksoil, udl, axial_load, max_curve, num_incr, stype="rc")
             if stype == "elastic":
                 bot_sect = o3.section.Elastic2D(osi, e_mod, area, i_z)
                 integ = o3.beam_integration.Lobatto(osi, bot_sect, big_n=5)
-                fd_eles.append(o3.element.ElasticBeamColumn2D(osi, [fd_nds[i], fd_nds[i-1]], area=area, e_mod=e_mod, iz=i_z, transf=transf))
+                # fd_eles.append(o3.element.ElasticBeamColumn2D(osi, [fd_nds[i], fd_nds[i-1]], area=area, e_mod=e_mod, iz=i_z, transf=transf))
 
-            if stype == "rc":
+            elif stype == "rc":
                 bot_sect = get_rc_fibre_section(osi, conc_conf, conc_unconf, rebar, nf_core_y, nf_core_z, nf_cover_y, nf_cover_z)
                 integ = o3.beam_integration.Lobatto(osi, bot_sect, big_n=5)
-                fd_eles.append(o3.element.DispBeamColumn(osi, [fd_nds[i], fd_nds[i-1]], transf=transf, integration=integ))
+            else:
+                raise ValueError('set stype to elastic or rc')
+            fd_eles.append(o3.element.DispBeamColumn(osi, [fd_nds[i], fd_nds[i-1]], transf=transf, integration=integ))
 
     o3.Fix3DOFMulti(osi, sl_nds, o3.cc.FIXED, o3.cc.FIXED, o3.cc.FIXED)  # Fix all the soil nodes
     o3.Fix3DOF(osi, fd_nds[0], o3.cc.FIXED, o3.cc.FREE, o3.cc.FREE)
@@ -243,7 +245,11 @@ def run(lf, dx, xd, yd, ksoil, udl, axial_load, max_curve, num_incr, stype="rc")
     max_steps = 1000
     fd_incs = ymin / max_steps
     o3.integrator.DisplacementControl(osi, fd_nds[max_ind], dof=o3.cc.Y, incr=fd_incs, num_iter=100) #change back to incr=ymin/100
+    ndr = o3.recorder.NodesToArrayCache(osi, fd_nds, dofs=[o3.cc.Y], res_type='disp')
+    efr = o3.recorder.ElementsToArrayCache(osi, fd_eles, arg_vals=['section', 1, 'force'])  # Not working for NL but there are some other inputs needed
+    print(efr.parameters)
     ndisps = [[]]
+    mom = [[]]
     for j in range(nnodes):
         ndisps[0].append(o3.get_node_disp(osi, fd_nds[j], dof=o3.cc.Y))
     for i in range(max_steps + 20):
@@ -255,11 +261,13 @@ def run(lf, dx, xd, yd, ksoil, udl, axial_load, max_curve, num_incr, stype="rc")
             ndisps[-1].append(o3.get_node_disp(osi, fd_nds[j], dof=o3.cc.Y))
         print('y_disps: ', [f'{dy:.3}' for dy in ndisps[-1]])
         y_disp_max = o3.get_node_disp(osi, sl_nds[max_ind], dof=o3.cc.Y)
+        print('mom: ', o3.get_ele_response(osi, fd_eles[4], 'force')[2])  # save this to mom list - the recorder is broken
         if -y_disp_max > -ymin:
             print('break: ', y_disp_max, ymin)
             break
-
-    return nx, ndisps, xd0n,xd1n, yd0, yd1
+    o3.wipe(osi)  # if you are using a recorder you need to have this line
+    node_disps = ndr.collect()
+    return nx, node_disps, efr.collect(), xd0n,xd1n, yd0, yd1
 
     # print(nx)
     # plt.plot(nx, ndisps[0], label='Initial Foundation')
@@ -284,8 +292,8 @@ def run(lf, dx, xd, yd, ksoil, udl, axial_load, max_curve, num_incr, stype="rc")
 def create(): #creates plot
 
     #grabs relevant values from run function
-    nx_elastic, ndisps_elastic, xd0n_elastic, xd1n_elastic, yd0_elastic, yd1_elastic = run(lf=10, dx=0.5, xd=(3,7), yd=(-0.1,-0.1), ksoil=2.5e3, udl=0.03e3, axial_load=0, max_curve=0.003, num_incr=500, stype="elastic")
-    nx_rc, ndisps_rc, xd0n_rc, xd1n_rc, yd0_rc, yd1_rc = run(lf=10, dx=0.5, xd=(3,7), yd=(-0.1,-0.1), ksoil=2.5e3, udl=0.03e3, axial_load=0, max_curve=0.003, num_incr=500, stype="rc")
+    nx_elastic, ndisps_elastic, forces_el, xd0n_elastic, xd1n_elastic, yd0_elastic, yd1_elastic = run(lf=10, dx=0.5, xd=(3,7), yd=(-0.1,-0.1), ksoil=2.5e3, udl=0.03e3, axial_load=0, max_curve=0.003, num_incr=500, stype="elastic")
+    nx_rc, ndisps_rc, xd0n_rc, forces_rc, xd1n_rc, yd0_rc, yd1_rc = run(lf=10, dx=0.5, xd=(3,7), yd=(-0.1,-0.1), ksoil=2.5e3, udl=0.03e3, axial_load=0, max_curve=0.003, num_incr=500, stype="rc")
 
     """
     Run an analysis imposing a uniform load, on a foundation with soil springs
@@ -308,21 +316,28 @@ def create(): #creates plot
         (y0, y1) displacements of section of soil at x0 and x1 (note should be -ve)
     :return:
     """
+    bf, ax = plt.subplots(nrows=2)
+    ax[0].plot(nx_elastic, ndisps_elastic[0], label='Initial', c="g")
+    ax[0].plot(nx_elastic, ndisps_elastic[int(len(ndisps_elastic) / 2)], label='Linear @ 50%', c="b", ls = "--")
+    ax[0].plot(nx_elastic, ndisps_elastic[-1], label='Linear @ 100%', c="b")
+    # ax[0].plot([xd0n_elastic, xd1n_elastic], [yd0_elastic, yd1_elastic], c='r', label='Imposed')
+    mom = forces_el[:, 2::6]
+    el_x = (nx_elastic[1:] + nx_elastic[:-1]) / 2
+    ax[1].plot(el_x, mom[0], label='Initial', c="g")
+    ax[1].plot(el_x, mom[-1], label='Linear @ 100%', c="b")
 
-    plt.plot(nx_elastic, ndisps_elastic[0], label='Initial', c="g")
-    plt.plot(nx_elastic, ndisps_elastic[int(len(ndisps_elastic) / 2)], label='Linear @ 50%', c="b", ls = "--")
-    plt.plot(nx_elastic, ndisps_elastic[-1], label='Linear @ 100%', c="b")
-    # plt.plot([xd0n_elastic, xd1n_elastic], [yd0_elastic, yd1_elastic], c='r', label='Imposed')
-
-    plt.plot(nx_rc, ndisps_rc[0], label='Initial', c="k", ls="-.")
-    plt.plot(nx_rc, ndisps_rc[int(len(ndisps_elastic) / 2)], label='Non-Linear @ 50%', c="k", ls="--")
-    plt.plot(nx_rc, ndisps_rc[-1], label='Non-Linear @ 100%', c="k")
-    plt.plot([xd0n_rc, xd1n_rc], [yd0_rc, yd1_rc], c='r', label='Imposed')
-    plt.xlabel('Foundation Length (m)')
-    plt.ylabel('Settlement (m)')
-    plt.grid()
+    ax[0].plot(nx_rc, ndisps_rc[0], label='Initial', c="k", ls="-.")
+    ax[0].plot(nx_rc, ndisps_rc[int(len(ndisps_elastic) / 2)], label='Non-Linear @ 50%', c="k", ls="--")
+    ax[0].plot(nx_rc, ndisps_rc[-1], label='Non-Linear @ 100%', c="k")
+    mom = forces_rc[:, 2::6]
+    el_x = (nx_elastic[1:] + nx_elastic[:-1]) / 2
+    ax[1].plot(el_x, mom[-1], label='Non-Linear @ 100%', c="k")
+    # ax[0].plot([xd0n_rc, xd1n_rc], [yd0_rc, yd1_rc], c='r', label='Imposed')
+    ax[0].set_xlabel('Foundation Length (m)')
+    ax[0].set_ylabel('Settlement (m)')
+    # plt.grid()
     
-    plt.legend(bbox_to_anchor =(0,0))
+    ax[0].legend(bbox_to_anchor =(0,0))
 
     plt.show()
 
