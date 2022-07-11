@@ -207,6 +207,7 @@ def run(lf, dx, xd, yd, ksoil, udl, axial_load, max_curve, num_incr, stype="rc")
         o3.Load(osi, fd_nds[i], [0, -ploads[i], 0])
 
     # Run initial static analysis
+ 
     o3.constraints.Transformation(osi)
     o3.test_check.NormDispIncr(osi, tol=1.0e-6, max_iter=35, p_flag=0)
     o3.algorithm.Newton(osi)
@@ -244,30 +245,51 @@ def run(lf, dx, xd, yd, ksoil, udl, axial_load, max_curve, num_incr, stype="rc")
     max_ind = [ind0, ind1][np.argmin([yd0, yd1])]  # use the node that has the largest displacement
     max_steps = 1000
     fd_incs = ymin / max_steps
-    o3.integrator.DisplacementControl(osi, fd_nds[max_ind], dof=o3.cc.Y, incr=fd_incs, num_iter=100) #change back to incr=ymin/100
-    ndr = o3.recorder.NodesToArrayCache(osi, fd_nds, dofs=[o3.cc.Y], res_type='disp')
+    o3.integrator.DisplacementControl(osi, fd_nds[max_ind], dof=o3.cc.Y, incr=fd_incs, num_iter=100) 
+    
+    ndr = o3.recorder.NodesToArrayCache(osi, fd_nds, dofs=[o3.cc.Y], res_type='disp') #Node displacement recorder
     efr = o3.recorder.ElementsToArrayCache(osi, fd_eles, arg_vals=['section', 1, 'force'])  # Not working for NL but there are some other inputs needed
-    print(efr.parameters)
+    print("hi found elsse", len(fd_eles))
+    # print(efr.parameters)
     ndisps = [[]]
-    mom = [[]]
+    mom = []
+    print("nndoes")
+    print(nnodes)
     for j in range(nnodes):
         ndisps[0].append(o3.get_node_disp(osi, fd_nds[j], dof=o3.cc.Y))
+        # mom.append(o3.get_ele_response(osi, fd_eles[4], 'force')[2])
+    print('hi', ndisps)
     for i in range(max_steps + 20):
         fail = o3.analyze(osi, 1)
         if fail:
             raise ValueError()
         ndisps.append([])
         for j in range(nnodes):
+     
             ndisps[-1].append(o3.get_node_disp(osi, fd_nds[j], dof=o3.cc.Y))
-        print('y_disps: ', [f'{dy:.3}' for dy in ndisps[-1]])
+            
+        for j in range(nnodes):
+            mom.append(o3.get_ele_response(osi, fd_eles[4], 'force')[2])
+            
+        # print('y_disps: ', [f'{dy:.3}' for dy in ndisps[-1]])
         y_disp_max = o3.get_node_disp(osi, sl_nds[max_ind], dof=o3.cc.Y)
-        print('mom: ', o3.get_ele_response(osi, fd_eles[4], 'force')[2])  # save this to mom list - the recorder is broken
+        
+        
+        # mom[-1].append(o3.get_ele_response(osi, fd_eles[4], 'force')[2])
+        
+    
+        # print('mom: ', o3.get_ele_response(osi, fd_eles[4], 'force')[2]) # save this to mom list - the recorder is broken
+        # mom.append(o3.get_ele_response(osi, fd_eles[4], 'force')[2])
         if -y_disp_max > -ymin:
+            
             print('break: ', y_disp_max, ymin)
             break
+        
+  
     o3.wipe(osi)  # if you are using a recorder you need to have this line
     node_disps = ndr.collect()
-    return nx, node_disps, efr.collect(), xd0n,xd1n, yd0, yd1
+    forces = efr.collect()
+    return nx, node_disps, forces, xd0n,xd1n, yd0, yd1, mom
 
     # print(nx)
     # plt.plot(nx, ndisps[0], label='Initial Foundation')
@@ -292,8 +314,8 @@ def run(lf, dx, xd, yd, ksoil, udl, axial_load, max_curve, num_incr, stype="rc")
 def create(): #creates plot
 
     #grabs relevant values from run function
-    nx_elastic, ndisps_elastic, forces_el, xd0n_elastic, xd1n_elastic, yd0_elastic, yd1_elastic = run(lf=10, dx=0.5, xd=(3,7), yd=(-0.1,-0.1), ksoil=2.5e3, udl=0.03e3, axial_load=0, max_curve=0.003, num_incr=500, stype="elastic")
-    nx_rc, ndisps_rc, xd0n_rc, forces_rc, xd1n_rc, yd0_rc, yd1_rc = run(lf=10, dx=0.5, xd=(3,7), yd=(-0.1,-0.1), ksoil=2.5e3, udl=0.03e3, axial_load=0, max_curve=0.003, num_incr=500, stype="rc")
+    nx_elastic, ndisps_elastic, forces_el, xd0n_elastic, xd1n_elastic, yd0_elastic, yd1_elastic,mom_el = run(lf=10, dx=0.5, xd=(3,7), yd=(-0.1,-0.1), ksoil=2.5e3, udl=0.03e3, axial_load=0, max_curve=0.003, num_incr=500, stype="elastic")
+    nx_rc, ndisps_rc, xd0n_rc, forces_rc, xd1n_rc, yd0_rc, yd1_rc, mom_rc = run(lf=10, dx=0.5, xd=(3,7), yd=(-0.1,-0.1), ksoil=2.5e3, udl=0.03e3, axial_load=0, max_curve=0.003, num_incr=500, stype="rc")
 
     """
     Run an analysis imposing a uniform load, on a foundation with soil springs
@@ -316,28 +338,67 @@ def create(): #creates plot
         (y0, y1) displacements of section of soil at x0 and x1 (note should be -ve)
     :return:
     """
+    # print(forces_el)
+    # print(forces_rc)
+   
+    # print(mom_el)
+    print('hi - len mom el',len(mom_el))
+    print('mom_rc')
+    # print(mom_rc)
+    print('hi len mom rc ', len(mom_rc))
+    print(len(nx_elastic))
+    
+    # length_found = 10 #foundation lenght in m
+    
+    
     bf, ax = plt.subplots(nrows=2)
-    ax[0].plot(nx_elastic, ndisps_elastic[0], label='Initial', c="g")
-    ax[0].plot(nx_elastic, ndisps_elastic[int(len(ndisps_elastic) / 2)], label='Linear @ 50%', c="b", ls = "--")
-    ax[0].plot(nx_elastic, ndisps_elastic[-1], label='Linear @ 100%', c="b")
+    
+    "elastic model plotting"
+    ax[0].plot(nx_elastic, ndisps_elastic[0], label='Initial Linear', c="r", ls='-.')
+    # ax[0].plot(nx_elastic, ndisps_elastic[int(len(ndisps_elastic) / 2)], label='Linear @ 50%', c="b", ls = "--") #Plotting for 50% but this is no longer 50%!! Depends on array length!!
+    ax[0].plot(nx_elastic, ndisps_elastic[-1], label='Linear Final', c="r")
+    
+    
     # ax[0].plot([xd0n_elastic, xd1n_elastic], [yd0_elastic, yd1_elastic], c='r', label='Imposed')
-    mom = forces_el[:, 2::6]
-    el_x = (nx_elastic[1:] + nx_elastic[:-1]) / 2
-    ax[1].plot(el_x, mom[0], label='Initial', c="g")
-    ax[1].plot(el_x, mom[-1], label='Linear @ 100%', c="b")
+    
+    # print(forces_el)
 
-    ax[0].plot(nx_rc, ndisps_rc[0], label='Initial', c="k", ls="-.")
-    ax[0].plot(nx_rc, ndisps_rc[int(len(ndisps_elastic) / 2)], label='Non-Linear @ 50%', c="k", ls="--")
-    ax[0].plot(nx_rc, ndisps_rc[-1], label='Non-Linear @ 100%', c="k")
-    mom = forces_rc[:, 2::6]
+    # mom = forces_el[:, 2::6]
+    # print(mom)
+
+    el_x = (nx_elastic[1:] + nx_elastic[:-1])/2 
+    print(el_x)
+    print('hi len exl', len(el_x), el_x)
+    print("he len mom_el", len(mom_el), mom_el)
+    ax[1].plot(el_x, mom_el[20:40], label='Linear', c="r")
+    ax[1].plot(el_x, mom_el[20:40], label='Linear', c="r") #plots 
+    
+    "dispbeam column plotting"
+
+    ax[0].plot(nx_rc, ndisps_rc[0], label='Initial Non-Linear', c="k", ls="-.") #non linear
+    # ax[0].plot(nx_rc, ndisps_rc[int(len(ndisps_elastic) / 2)], label='Non-Linear', c="k", ls="--")
+    ax[0].plot(nx_rc, ndisps_rc[-1], label='Non-Linear Final', c="k") 
+    
+
+    # mom = forces_rc[:, 2::6]
+    # print(len(mom))
+ 
+    # print(mom) 
     el_x = (nx_elastic[1:] + nx_elastic[:-1]) / 2
-    ax[1].plot(el_x, mom[-1], label='Non-Linear @ 100%', c="k")
+    # print(el_x)
+    print("hi len mom rc", len(mom_rc), mom_rc)
+    
+    ax[1].plot(el_x, mom_rc[10:30], label='Non-Linear',c='k')
+    ax[1].plot(el_x, mom_rc[10:30], label='Non-Linear', c="k")
     # ax[0].plot([xd0n_rc, xd1n_rc], [yd0_rc, yd1_rc], c='r', label='Imposed')
     ax[0].set_xlabel('Foundation Length (m)')
     ax[0].set_ylabel('Settlement (m)')
+    ax[1].set_ylabel("Bending Moment - WIP")
+    ax[1].set_xlabel("Foundation Length (m)")
     # plt.grid()
     
-    ax[0].legend(bbox_to_anchor =(0,0))
+    ax[1].legend(bbox_to_anchor =(1,1))
+    ax[0].legend(bbox_to_anchor =(1,1))
 
     plt.show()
 
