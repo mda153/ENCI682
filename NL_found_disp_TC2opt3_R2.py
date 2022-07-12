@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Jul 12 12:26:03 2022
+
+@author: mda153
+"""
+
 """
 Created on Mon Mar  7 12:51:03 2022
 
@@ -29,16 +36,19 @@ def get_rc_fibre_section(osi, conc_conf, conc_unconf, rebar, nf_core_y, nf_core_
     :return:
     """
     import numpy as np
+    fc = 30.0e6 #Pa
+    fy = 300.0e6  #Pa
+    Es = 200.0e9  # Steel modulus [Pa]
+    
+
 
     col_sect = sm.sections.RCDetailedSection(depth=0.6, width=0.3)
     col_sect.layer_depths = [0.04, 0.56]  # 40mm cover
     col_sect.bar_diams = [[0.016, 0.016, 0.016], [0.016, 0.016, 0.016]]  # 16mm bars
     col_sect.bar_centres = [[0.04, 0.56], [0.04, 0.56]]
-    rc_mat = sm.materials.ReinforcedConcreteMaterial(fc=30e6, fy=300e6,
-                                                     e_mod_steel=200e9, poissons_ratio=0.18)
-    fy = 300  # MPa
-    Es = 200000  # Steel modulus [MPa]
-
+    rc_mat = sm.materials.ReinforcedConcreteMaterial(fc=fc, fy=fy,
+                                                     e_mod_steel=Es, poissons_ratio=0.18)
+    
     rebar = o3.uniaxial_material.Steel01(osi, fy=fy, e0=Es, b=0.01)  # Reinforcing steel
     area_steel = 0.025 ** 2 / 4 * np.pi * 8
     a_sect = col_sect.depth * col_sect.width
@@ -105,35 +115,35 @@ def get_rc_fibre_section(osi, conc_conf, conc_unconf, rebar, nf_core_y, nf_core_
 
 def run(lf, dx, xd, yd, ksoil, udl, axial_load, max_curve, num_incr, stype="rc"):
     print('running: ', stype)
-    d = 0.600  # section depth (mm)
-    b = 0.300  # section width (mm)
+    d = 0.600  # section depth (m)
+    b = 0.300  # section width (m)
 
     # Mander inputs - also used in opensees inputs - From View Material Behavior Script
-    fpc = 30  # Conc compressive strength (MPa)
-    eps_unconf_conc_max = 0.002  # Ultimate strain for unconfined concrete Priestly et al. 2007, lower bound (0.004 - 0.005)
+    fpc = 30.0e6  # Conc compressive strength (Pa)
+    # eps_unconf_conc_max = 0.002  # Ultimate strain for unconfined concrete Priestly et al. 2007, lower bound (0.004 - 0.005)
     eps_conf_conc_max = 0.002
     eps_conc_crush_unconf = 0.004  # Concrte strain at crushing unconf.
     eps_conc_crush_conf = 0.03  # conf conc strain at crushing conf.
-    Ec = 5000 * np.sqrt(fpc)  # Conc modulus of elasticity (MPa) in Mander script for auto calc
-    Ast = 804.248  # Total area of longtitudinal steel
-    Dh = 12  # diameter of transverse reinforcement (mm)
-    clb = 44  # cover to longtitudinal bars (mm)
-    s = 450  # spacing of transverse steel (mm)
-    fy = 300  # MPa
-    Es = 205000  # Steel modulus [MPa]
-    fyh = 1
-    eco = 0.002  # Unconfined concrete strain (ususally 0.002 for normal weight or 0.004 for lightweight)
-    esm = 0.15  # max transverse steel strain (usually ~0.1 - 0.15)
+    Ec = 5000 * np.sqrt(fpc)  # Conc modulus of elasticity (Pa) in Mander script for auto calc
+    # Ast = 804.248  # Total area of longtitudinal steel
+    # Dh = 12  # diameter of transverse reinforcement (mm)
+    # clb = 44  # cover to longtitudinal bars (mm)
+    # s = 450  # spacing of transverse steel (mm)
+    fy = 300.0e6  #Pa
+    Es = 200.0e9  # Steel modulus [Pa]
+    # fyh = 1
+    # eco = 0.002  # Unconfined concrete strain (ususally 0.002 for normal weight or 0.004 for lightweight)
+    # esm = 0.15  # max transverse steel strain (usually ~0.1 - 0.15)
     espall = 0.0064  # Maximum uncon. conc. strain (usually 0.0064)
-    section = 1
-    D = 1
+    # section = 1
+    # D = 1
 
     nf_core_y = 16  # number of fibers in Y-Y dir - for the concrete core - (10 - 20 is a good number here)
     nf_core_z = 16  # number of fibers in Z-Z dir
     nf_cover_y = 20  # number of fibers Y-Y dir, including cover concrete
     nf_cover_z = 20  # number of fibers Z-Z dir, including cover concrete
-    n_bars = 2
-    bar_area = 201.0619298  # [mm^2] area of one 16mm diameter reinforcing bar
+    # n_bars = 2
+    # bar_area = 201.0619298  # [mm^2] area of one 16mm diameter reinforcing bar
 
     osi = o3.OpenSeesInstance(ndm=2, ndf=3)  # 2D with 3 DOF
     s_width = b # section width [m]
@@ -161,7 +171,7 @@ def run(lf, dx, xd, yd, ksoil, udl, axial_load, max_curve, num_incr, stype="rc")
     sl_nds = []  # soil nodes
     sl_eles = []
     fd_eles = []
-    spring_mats = []
+    # spring_mats = []
     "Soil Nodes"
     for i in range(len(nx)):
         fd_nds.append(o3.node.Node(osi, nx[i], 0.0))
@@ -180,7 +190,7 @@ def run(lf, dx, xd, yd, ksoil, udl, axial_load, max_curve, num_incr, stype="rc")
         sl_eles.append(o3.element.ZeroLength(osi, [fd_nds[-1], sl_nds[-1]], mats=[mat], dirs=[o3.cc.Y]))
         "Foundation nodes"
         if i != 0:
-            e_mod = Ec * 1e6  # Pa
+            e_mod = Ec # Pa
             area = s_width * s_depth
             i_z = s_depth ** 3 * s_width / 12
 
@@ -304,7 +314,7 @@ def create(): #creates plot
     :param ksoil:
         Subgrade stiffness of soil [N/m3]
     :param udl:
-        Uniform distributed load on foundation [Pa]
+        Uniform distributed load on foundation [Pa] #want to do this in N/m 
     :param xd:
         (x0, x1) positions of displaced section of soil
     :param yd:
@@ -317,7 +327,7 @@ def create(): #creates plot
     cols = ['r', 'b']
     # stypes = [stypes[0]]
     for ss, stype in enumerate(stypes):
-        nx_elastic, ndisps_elastic, forces_el, xd0n_elastic, xd1n_elastic, yd0_elastic, yd1_elastic,mom_el = run(lf=10, dx=0.5, xd=(3,7), yd=(-0.1,-0.1), ksoil=2.5e3, udl=0.03e3, axial_load=0, max_curve=0.003, num_incr=500, stype=stype)
+        nx_elastic, ndisps_elastic, forces_el, xd0n_elastic, xd1n_elastic, yd0_elastic, yd1_elastic,mom_el = run(lf=10, dx=0.5, xd=(3,7), yd=(-0.1,-0.1), ksoil=25000e3, udl=8.59e3, axial_load=0, max_curve=0.003, num_incr=500, stype=stype)
         # nx_rc, ndisps_rc, xd0n_rc, forces_rc, xd1n_rc, yd0_rc, yd1_rc, mom_rc = run(lf=10, dx=0.5, xd=(3,7), yd=(-0.1,-0.1), ksoil=2.5e3, udl=0.03e3, axial_load=0, max_curve=0.003, num_incr=500, stype="rc")
 
         # print(forces_el)
@@ -348,7 +358,7 @@ def create(): #creates plot
         print(el_x)
         print('hi len exl', len(el_x), el_x)
         print("he len mom_el", len(mom_el), mom_el)
-        ax[1].plot(el_x, mom_el[0], label=f'{stype}', c=cols[ss])
+        ax[1].plot(el_x, mom_el[-1], label=f'{stype}', c=cols[ss])
         # ax[1].plot(el_x, mom_el[20:40], label='Linear', c="r") #plots
 
         "dispbeam column plotting"
@@ -371,7 +381,7 @@ def create(): #creates plot
     # ax[0].plot([xd0n_rc, xd1n_rc], [yd0_rc, yd1_rc], c='r', label='Imposed')
     ax[0].set_xlabel('Foundation Length (m)')
     ax[0].set_ylabel('Settlement (m)')
-    ax[1].set_ylabel("Bending Moment - WIP")
+    ax[1].set_ylabel("Bending Moment (Nm)")
     ax[1].set_xlabel("Foundation Length (m)")
     # plt.grid()
     
