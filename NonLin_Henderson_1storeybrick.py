@@ -1,23 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Jul 26 13:31:08 2022
-
-@author: mda153
-"""
-
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Jul 12 12:26:03 2022
-
-@author: mda153
-"""
-
-"""
-Created on Mon Mar  7 12:51:03 2022
-
-@author: mda153
-"""
-
 import o3seespy as o3
 import numpy as np
 import matplotlib.pyplot as plt
@@ -121,10 +101,9 @@ def get_rc_fibre_section(osi, conc_conf, conc_unconf, rebar, nf_core_y, nf_core_
     return sect
 
 
-def run(lf, dx, xd, yd, ksoil, udl, axial_load, max_curve, num_incr, stype="Non-Linear"):
+def run(lf, dx, xd, yd, ksoil, udl, num_incr, stype="Non-Linear"):
     print('running: ', stype)
     # spring_spacing = 0.5 # [m] spring spacing
-    
 
     imposed_displacement = 0.1 #[m]
     d = 0.6  # section depth [m]
@@ -199,7 +178,8 @@ def run(lf, dx, xd, yd, ksoil, udl, axial_load, max_curve, num_incr, stype="Non-
         dettach = 1
         mat_base = o3.uniaxial_material.ElasticPP(osi, 1*ks[i], 1*py[i] / ks[i], -1 * py[i] / ks[i]) #low tension stiffness
         if dettach:
-            mat_obj2 = o3.uniaxial_material.Elastic(osi, 1000 * ks[i], eneg= 0.001 * ks[i])
+            mat_obj2 = o3.uniaxial_material.Elastic(osi, 10000 * ks[i], eneg=0.000001 * ks[i])
+            # mat_obj2 = o3.uniaxial_material.ENT(osi, 1000 * ks[i])
             # mat_obj2 = o3.uniaxial_material.Elastic(osi, 0.001 * ks[i], eneg=1000 * ks[i])
             mat = o3.uniaxial_material.Series(osi, [mat_base, mat_obj2])
         else:
@@ -210,7 +190,6 @@ def run(lf, dx, xd, yd, ksoil, udl, axial_load, max_curve, num_incr, stype="Non-
         if i != 0:
             fc = 17.2e6 #[Pa]
             e_mod = 5000*np.sqrt(fc)*1e3 # Pa
-            print(e_mod)
             
             area = s_width * s_depth
             i_z = s_depth ** 3 * s_width / 12
@@ -261,6 +240,7 @@ def run(lf, dx, xd, yd, ksoil, udl, axial_load, max_curve, num_incr, stype="Non-
 
     ts0 = o3.time_series.Linear(osi, factor=1)
     o3.pattern.Plain(osi, ts0)
+
     yd = np.array(yd) -udl / ksoil
     xd0 = xd[0]  # start position of displaced section
     xd1 = xd[1]  # end position of displaced section
@@ -274,22 +254,21 @@ def run(lf, dx, xd, yd, ksoil, udl, axial_load, max_curve, num_incr, stype="Non-
         xi = nx[i]
         ydi = yd0 + (yd1 - yd0) / (xd1n - xd0n) * (xi - xd0n)  # linear interpolate
         o3.SP(osi, sl_nds[i], o3.cc.Y, [ydi])  # impose displacement
-    ymin = min([yd0, yd1])
-    max_ind = [ind0, ind1][np.argmin([yd0, yd1])]  # use the node that has the largest displacement
-    max_steps = 1000
-    fd_incs = ymin / max_steps
 
-    o3.integrator.DisplacementControl(osi, fd_nds[max_ind], dof=o3.cc.Y, incr=fd_incs, num_iter=10) 
+    ymin = min([yd0, yd1])
+    ydiff = ymin - -udl / ksoil
+    max_ind = [ind0, ind1][np.argmin([yd0, yd1])]  # use the node that has the largest displacement
+
+    # o3.integrator.DisplacementControl(osi, fd_nds[max_ind], dof=o3.cc.Y, incr=fd_incs, num_iter=10)
+    o3.integrator.LoadControl(osi, incr=1 / num_incr)
     
     ndr = o3.recorder.NodesToArrayCache(osi, fd_nds, dofs=[o3.cc.Y], res_type='disp') # Node displacement recorder
     efr = o3.recorder.ElementsToArrayCache(osi, fd_eles, arg_vals=['section', 1, 'force']) #element force recorder - records moments
-    soil_ele_forces_recorder = o3.recorder.ElementsToArrayCache(osi, sl_eles, arg_vals=['force']) #records the soil spring force
-
+    soil_ele_forces_recorder = o3.recorder.ElementsToArrayCache(osi, sl_eles, arg_vals=['localForce']) #records the soil spring force
 
     ndisps = [[]]
     mom = [[]]
     shear = [[]]
-
 
     for j in range(nnodes):
         ndisps[0].append(o3.get_node_disp(osi, fd_nds[j], dof=o3.cc.Y))
@@ -299,10 +278,8 @@ def run(lf, dx, xd, yd, ksoil, udl, axial_load, max_curve, num_incr, stype="Non-
         
     for j in range(nnodes - 1):
         shear[0].append(o3.get_ele_response(osi, fd_eles[j], 'force')[4])
-        
-    print('hi', ndisps)
-    
-    for i in range(100):
+
+    for i in range(num_incr):
         fail = o3.analyze(osi, 1)
         if fail:
             raise ValueError()
@@ -319,11 +296,7 @@ def run(lf, dx, xd, yd, ksoil, udl, axial_load, max_curve, num_incr, stype="Non-
             
         for j in range(nnodes-1):
             shear[-1].append(o3.get_ele_response(osi, fd_eles[j], 'force')[4])
-            
-            
-            
-            
-            
+
         # print('y_disps: ', [f'{dy:.3}' for dy in ndisps[-1]])
         y_disp_max = o3.get_node_disp(osi, sl_nds[max_ind], dof=o3.cc.Y)
         if -y_disp_max > -ymin:
@@ -340,11 +313,9 @@ def run(lf, dx, xd, yd, ksoil, udl, axial_load, max_curve, num_incr, stype="Non-
     print('ndisps', ndisps)
     print("moment", mom)
     print("shear", shear)
-    print("SPRINGZZ", spring_forces, len(spring_forces))
+    print("SPRINGZZ", spring_forces[-1], len(spring_forces))
     
     return nx, node_disps, forces, xd0n,xd1n, yd0, yd1, mom, shear, ndisps, spring_forces
-
-
 
 
 def create(): #creates plot
@@ -367,7 +338,7 @@ def create(): #creates plot
         (y0, y1) displacements of section of soil at x0 and x1 (note should be -ve)
     :return:
     """
-    bf, ax = plt.subplots(nrows=2, squeeze=True)
+    bf, ax = plt.subplots(nrows=3, squeeze=True)
     #grabs relevant values from run function
     stypes = ["Elastic", "Non-Linear"]
     cols = ['r', 'b']
@@ -377,16 +348,17 @@ def create(): #creates plot
     m_yield = -32000
     
     m_ult = -48000
+
+    support_disp = -0.5
     
 
-    
+    xd = (4, 6)
     # stypes = [stypes[0]]
     for ss, stype in enumerate(stypes):
-        nx, ndisps, forces, xd0n, xd1n, yd0, yd1,mom, shear, ndisps, spring_forces = run(lf=10, dx=0.5, xd=(4,6), yd=(-0.5,-0.5), ksoil=3.847e6, udl=8600, axial_load=0, max_curve=0.003, num_incr=500, stype=stype)
+        nx, ndisps, forces, xd0n, xd1n, yd0, yd1,mom, shear, ndisps, spring_forces = run(lf=10, dx=0.5, xd=xd, yd=(support_disp,support_disp), ksoil=3.847e6, udl=8600, num_incr=500, stype=stype)
         # nx_rc, ndisps_rc, xd0n_rc, forces_rc, xd1n_rc, yd0_rc, yd1_rc, mom_rc, sh_rc, ndisps = run(lf=10, dx=0.5, xd=(3,7), yd=(-0.1,-0.1), ksoil=2.5e3, udl=0.03e3, axial_load=0, max_curve=0.003, num_incr=500, stype="rc")
         #ksoil=25000kN/m=> 25000e3N/m and 
         # udl = 0.45kPa => 484Pa - this is based on house weight results from henderson - scaling down the whole house weight to the proportion of the weight acting on foundation beam
-
 
         "elastic model plotting"
         # print("SPRINGGG", spring_forces)
@@ -405,16 +377,14 @@ def create(): #creates plot
         ax[1].plot(el_x, mom[-1], label=f'{stype}', c=cols[ss]) #plots
         
         # ax[2].plot(el_x, py, label=f'Initial {stype}', c=cols[ss], ls='-.')
-        
 
-        
-        # ax[2].plot(el_x, spring_forces[0], label=f'{stype}', c=cols[ss])
+        ax[2].plot(nx, spring_forces[-1], label=f'{stype}', c=cols[ss])
         
         # ax[2].plot(nx, spring)
         # ax[2].plot(el_x, shear[-1], label=f'{stype}', c=cols[ss])
 
 
-
+    ax[0].axvspan(*xd, color=(0.3, 0.3, 0.3, 0.5), zorder=0)
     # ax[0].plot([xd0n_elastic, xd1n_elastic], [yd0_elastic, yd1_elastic], c='r', label='Imposed') #plots imposed displacement
     ax[1].axhline(m_crack, ls='-.', label="Cracking Moment", c="g")
     ax[1].axhline(m_yield, ls="-.", label='Yield Moment', c="orange")
@@ -443,8 +413,6 @@ def create(): #creates plot
 
 
 if __name__ == '__main__':
-    
-    
-    
+
     "Impose foundation displacement function"
     create()
