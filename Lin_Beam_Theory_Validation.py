@@ -213,7 +213,7 @@ def run(lf, dx, xd, yd, ksoil, udl, num_incr, stype="Non-Linear"):
                 integ = o3.beam_integration.Lobatto(osi, bot_sect, big_n=5)
             else:
                 raise ValueError('set stype to Elastic or Non-Linear')
-            fd_eles.append(o3.element.DispBeamColumn(osi, [fd_nds[i], fd_nds[i-1]], transf=transf, integration=integ))
+            fd_eles.append(o3.element.DispBeamColumn(osi, [fd_nds[i-1], fd_nds[i]], transf=transf, integration=integ))
 
     o3.Fix3DOFMulti(osi, sl_nds, o3.cc.FIXED, o3.cc.FIXED, o3.cc.FIXED)  # Fix all the soil nodes
     o3.Fix3DOF(osi, fd_nds[0], o3.cc.FIXED, o3.cc.FREE, o3.cc.FREE)
@@ -228,7 +228,8 @@ def run(lf, dx, xd, yd, ksoil, udl, num_incr, stype="Non-Linear"):
     # Run initial static analysis
  
     o3.constraints.Transformation(osi)
-    o3.test_check.NormDispIncr(osi, tol=1.0e-6, max_iter=35, p_flag=0)
+    # o3.test_check.NormDispIncr(osi, tol=1.0e-6, max_iter=35, p_flag=0)
+    o3.test.NormUnbalance(osi, tol=1.0e-4, max_iter=35, p_flag=0)
     o3.algorithm.Newton(osi)
     o3.numberer.RCM(osi)
     o3.system.SparseGeneral(osi)
@@ -296,18 +297,19 @@ def run(lf, dx, xd, yd, ksoil, udl, num_incr, stype="Non-Linear"):
         if fail:
             raise ValueError()
         ndisps.append([])
-        mom.append([])
+        mom.append([-o3.get_ele_response(osi, fd_eles[0], 'force')[2]])
         shear.append([])
-        
+        # q = o3.get_ele_response(osi, fd_eles[0], 'force')
+        # q1 = o3.get_ele_response(osi, fd_eles[-1], 'force')
         for j in range(nnodes):
             ndisps[-1].append(o3.get_node_disp(osi, fd_nds[j], dof=o3.cc.Y))
             
         for j in range(nnodes-1):
+            forces = o3.get_ele_response(osi, fd_eles[j], 'force')
+            # print(forces[2], forces[5])
             # print('force: ', o3.get_ele_response(osi, fd_eles[j], 'force'))
-            mom[-1].append(o3.get_ele_response(osi, fd_eles[j], 'force')[5])
-            
-        for j in range(nnodes-1):
-            shear[-1].append(o3.get_ele_response(osi, fd_eles[j], 'force')[4])
+            mom[-1].append(-forces[5])
+            shear[-1].append(forces[4])
 
         # print('y_disps: ', [f'{dy:.3}' for dy in ndisps[-1]])
         y_disp_max = o3.get_node_disp(osi, sl_nds[max_ind], dof=o3.cc.Y)
@@ -422,15 +424,15 @@ def create(): #creates plot
 
     support_disp = -0.1 #[m]
     udl = 8600 * 0.15  # kN/m
-    lf = 10  # length of foundation
+    lf = 30  # length of foundation
     dx = 0.5
     xd = (0, 10)
-    i = 4
+    i = 12
     los = dx * i * 2  # in increments of 2 since spring in centre
     xd = (lf / 2 - los / 2, lf / 2 + los / 2)
     # stypes = [stypes[0]]
     for ss, stype in enumerate(stypes):
-        nx, ndisps, forces, xd0n, xd1n, yd0, yd1,mom, shear, ndisps, spring_forces, M_fix, V_fix, disp_fix, M_pin, V_pin, disp_pin, x_incrs = run(lf=lf, dx=dx, xd=xd, yd=(support_disp,support_disp), ksoil=8.333*1e6, udl=udl, num_incr=500, stype=stype)
+        nx, node_disps, forces, xd0n, xd1n, yd0, yd1,mom, shear, ndisps, spring_forces, M_fix, V_fix, disp_fix, M_pin, V_pin, disp_pin, x_incrs = run(lf=lf, dx=dx, xd=xd, yd=(support_disp,support_disp), ksoil=8.333*1e6, udl=udl, num_incr=500, stype=stype)
         # nx_rc, ndisps_rc, xd0n_rc, forces_rc, xd1n_rc, yd0_rc, yd1_rc, mom_rc, sh_rc, ndisps = run(lf=10, dx=0.5, xd=(3,7), yd=(-0.1,-0.1), ksoil=2.5e3, udl=0.03e3, axial_load=0, max_curve=0.003, num_incr=500, stype="rc")
         #ksoil=25000kN/m=> 25000e3N/m and 
         # udl = 0.45kPa => 484Pa - this is based on house weight results from henderson - scaling down the whole house weight to the proportion of the weight acting on foundation beam
@@ -448,7 +450,7 @@ def create(): #creates plot
         moment[-1] = moment[0]
         
         incr = 0.5
-        moment.insert(21, 0)
+        # moment.insert(len(moment), 0)
         
         shear_force = shear[-1]
         # shear_force.append(-shear_force[0])
@@ -459,7 +461,11 @@ def create(): #creates plot
         
         print("length nodes_x:", len(nx),"length node_disps:", len(ndisps[-1]),"length bending_moment:", len(mom[-1]), "length shear:",len(shear[-1]))
 
-        ax[0].plot(nx, ndisps[-1], label=f'{stype}', c=cols[ss])
+        # ax[0].plot(nx, node_disps[0], label=f'{stype}', c=cols[ss])
+        # ax[0].plot(nx, node_disps[-1] - node_disps[0], label=f'{stype}', c=cols[ss])
+        ind = np.argmin(abs(nx - xd[0]))
+        diff_disp = node_disps[-1] - node_disps[0]
+        ax[0].plot(nx, diff_disp - diff_disp[ind], label=f'{stype}', c=cols[ss])
         V_pin = []
 
         x_los = nx[np.where((nx >= xd[0]) & (nx <= xd[1]))] - xd[0]
