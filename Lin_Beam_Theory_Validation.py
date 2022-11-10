@@ -150,9 +150,9 @@ def run(lf, dx, xd, yd, ksoil, udl, num_incr, stype="Non-Linear"):
 
     nnodes = max(int(lf / dx) + 1, 2)  # number of nodes
     nx = np.linspace(0, lf, nnodes)  # x-position of nodes
-    x_trib = np.ones_like(nx)  # Trib area
-    x_trib[1:] += np.diff(nx)
-    x_trib[:-1] += np.diff(nx)
+    x_trib = np.zeros_like(nx)  # Trib area
+    x_trib[1:] += np.diff(nx) / 2
+    x_trib[:-1] += np.diff(nx) / 2
     print(x_trib)
     # node_spacing = np.arange(0, lf+dx, dx, dtype=None)
     # print(x_trib)
@@ -219,7 +219,7 @@ def run(lf, dx, xd, yd, ksoil, udl, num_incr, stype="Non-Linear"):
     o3.Fix3DOF(osi, fd_nds[0], o3.cc.FIXED, o3.cc.FREE, o3.cc.FREE)
 
     # Define load
-    ploads = udl * s_width * x_trib
+    ploads = udl * x_trib
     ts0 = o3.time_series.Linear(osi, factor=1)
     o3.pattern.Plain(osi, ts0)
     for i in range(nnodes):
@@ -244,9 +244,11 @@ def run(lf, dx, xd, yd, ksoil, udl, num_incr, stype="Non-Linear"):
     for i in range(nnodes):
         ndisps.append(o3.get_node_disp(osi, fd_nds[i], dof=o3.cc.Y))
     # print('y_disps: ', [f'{dy:.3}' for dy in ndisps])
-    assert np.isclose(min(ndisps), max(ndisps)), (min(ndisps), max(ndisps), -udl / ksoil)
-    assert np.isclose(min(ndisps), -udl / ksoil, rtol=0.001), (min(ndisps), max(ndisps), -udl / ksoil)
+    assert np.isclose(min(ndisps), max(ndisps)), (min(ndisps), max(ndisps), -udl / (ksoil * b))
+    assert np.isclose(min(ndisps), -udl / (ksoil * b), rtol=0.001), (min(ndisps), max(ndisps), -udl / (ksoil * b))
 
+    total_force = sum([o3.get_ele_response(osi, ele, 'localForce')[0] for ele in sl_eles])
+    print('total_force under initial load: ', total_force)
     ts0 = o3.time_series.Linear(osi, factor=1)
     o3.pattern.Plain(osi, ts0)
 
@@ -313,6 +315,8 @@ def run(lf, dx, xd, yd, ksoil, udl, num_incr, stype="Non-Linear"):
             
             # print('break: ', y_disp_max, ymin)
             break
+    total_force = sum([o3.get_ele_response(osi, ele, 'localForce')[0] for ele in sl_eles])
+    print('total_force at end of loading: ', total_force)
 
     # for j in range(nnodes - 1):
         # print('force: ', o3.get_ele_response(osi, fd_eles[j], 'force'))
@@ -398,14 +402,14 @@ def create(): #creates plot
     :param ksoil:
         Subgrade stiffness of soil [N/m3]
     :param udl:
-        Uniform distributed load on foundation [Pa]
+        Uniform distributed load along foundation beam [kN/m]
     :param xd:
         (x0, x1) positions of displaced section of soil
     :param yd:
         (y0, y1) displacements of section of soil at x0 and x1 (note should be -ve)
     :return:
     """
-    bf, ax = plt.subplots(nrows=3, squeeze=True, sharex=(True))
+    bf, ax = plt.subplots(nrows=4, squeeze=True, sharex='col', figsize=(6, 8))
     #grabs relevant values from run function
     stypes = ["Elastic"]
     cols = ['r', 'b']
@@ -417,11 +421,16 @@ def create(): #creates plot
     m_ult = -48000 #{Nm}
 
     support_disp = -0.1 #[m]
-    
+    udl = 8600 * 0.15  # kN/m
+    lf = 10  # length of foundation
+    dx = 0.5
     xd = (0, 10)
+    i = 4
+    los = dx * i * 2  # in increments of 2 since spring in centre
+    xd = (lf / 2 - los / 2, lf / 2 + los / 2)
     # stypes = [stypes[0]]
     for ss, stype in enumerate(stypes):
-        nx, ndisps, forces, xd0n, xd1n, yd0, yd1,mom, shear, ndisps, spring_forces, M_fix, V_fix, disp_fix, M_pin, V_pin, disp_pin, x_incrs = run(lf=10, dx=0.5, xd=xd, yd=(support_disp,support_disp), ksoil=8.333*1e6, udl=8600, num_incr=500, stype=stype)
+        nx, ndisps, forces, xd0n, xd1n, yd0, yd1,mom, shear, ndisps, spring_forces, M_fix, V_fix, disp_fix, M_pin, V_pin, disp_pin, x_incrs = run(lf=lf, dx=dx, xd=xd, yd=(support_disp,support_disp), ksoil=8.333*1e6, udl=udl, num_incr=500, stype=stype)
         # nx_rc, ndisps_rc, xd0n_rc, forces_rc, xd1n_rc, yd0_rc, yd1_rc, mom_rc, sh_rc, ndisps = run(lf=10, dx=0.5, xd=(3,7), yd=(-0.1,-0.1), ksoil=2.5e3, udl=0.03e3, axial_load=0, max_curve=0.003, num_incr=500, stype="rc")
         #ksoil=25000kN/m=> 25000e3N/m and 
         # udl = 0.45kPa => 484Pa - this is based on house weight results from henderson - scaling down the whole house weight to the proportion of the weight acting on foundation beam
@@ -449,11 +458,13 @@ def create(): #creates plot
         print("shear at first point:", shear[-1], len(shear[-1]))
         
         print("length nodes_x:", len(nx),"length node_disps:", len(ndisps[-1]),"length bending_moment:", len(mom[-1]), "length shear:",len(shear[-1]))
-        
-        
-        
-        
+
         ax[0].plot(nx, ndisps[-1], label=f'{stype}', c=cols[ss])
+        V_pin = []
+
+        x_los = nx[np.where((nx >= xd[0]) & (nx <= xd[1]))] - xd[0]
+        for x in x_los:
+            V_pin.append(udl * (los / 2 - x))
         
         # ax[2].plot(nx, py)
 
@@ -462,20 +473,18 @@ def create(): #creates plot
 
         el_x = (nx[1:] + nx[:-1])/2
         print("el_x:", el_x)
-        
-    
+
         ax[1].plot(nx, moment, label=f'{stype}', c=cols[ss])
         # ax[1].plot(nx, moment, label="Elastic", c=cols[ss]) #plots
+
+        ax[1].plot(x_incrs + xd[0], M_pin, label='Pin-Pin', c='k')
+        ax[1].plot(x_incrs + xd[0], M_fix, label='Fix-Fix')
         
+        ax[0].plot(x_incrs + xd[0], disp_pin, label='Pin-Pin')
+        ax[0].plot(x_incrs + xd[0], disp_fix, label='Fix-Fix')
         
-        ax[1].plot(x_incrs, M_pin, label='Pin-Pin')
-        ax[1].plot(x_incrs, M_fix, label='Fix-Fix')
-        
-        ax[0].plot(x_incrs, disp_pin, label='Pin-Pin')
-        ax[0].plot(x_incrs, disp_fix, label='Fix-Fix')
-        
-        ax[2].plot(x_incrs, V_pin, label='Pin')
-        ax[2].plot(x_incrs, V_fix, label='Fix')
+        ax[2].plot(x_los + xd[0], V_pin, label='Pin')
+        ax[2].plot(x_incrs  + xd[0], V_fix, label='Fix', ls='--')
 
         
         print("max_moment:", min(mom[-1]))
@@ -485,7 +494,8 @@ def create(): #creates plot
         fmt = "x"
         # ax[2].plot(el_x, py, label=f'Initial {stype}', c=cols[ss], ls='-.')
 
-        ax[2].plot(nx, spring_forces[-1],fmt ,label="Node location", c=cols[ss])
+        ax[3].plot(nx, spring_forces[-1],fmt ,label="Node location", c=cols[ss])
+        print('total_force: ', sum(spring_forces[-1]), udl * lf)
         # ax[2].plot(nx, spring_forces[-1], fmt)
         
         # ax[2].plot(nx, spring)
