@@ -63,7 +63,7 @@ def get_moment_curvature(axial_load=0, max_curve=0.15, num_incr=100):
     conc_conf = o3.uniaxial_material.Concrete04(osi, fc=-fpc, epsc=-eps_conf_conc_max, epscu=-eps_conc_crush_conf, ec=Ec, fct=ft, et=0) #confined concrete properties
     conc_unconf = o3.uniaxial_material.Concrete04(osi, fc=-fpc, epsc=-eps_unconf_conc_max, epscu=-eps_conc_crush_unconf, ec=Ec, fct=ft, et=0) #unconfined concrte properties
     rebar = o3.uniaxial_material.Steel01(osi, fy=fy, e0=Es, b=0.02) #Steel reinforcing properties
-    
+
     #Defining concrete beam parameters
 
     h = d #Section height
@@ -132,8 +132,9 @@ def get_moment_curvature(axial_load=0, max_curve=0.15, num_incr=100):
     o3.Fix3DOF(osi, n2, 0, 1, 0)
     ele = o3.element.ZeroLengthSection(osi, [n1, n2], sect)
 
-    nd = o3.recorder.NodeToArrayCache(osi, n2, dofs=[3], res_type='disp')
-    nm = o3.recorder.NodeToArrayCache(osi, n1, dofs=[3], res_type='reaction')
+    ndr = o3.recorder.NodeToArrayCache(osi, n2, dofs=[3], res_type='disp')
+    nmr = o3.recorder.NodeToArrayCache(osi, n1, dofs=[3], res_type='reaction')
+    ecr = o3.recorder.ElementToArrayCache(osi, ele, arg_vals=['deformation'])
 
     ts = o3.time_series.Constant(osi)
     o3.pattern.Plain(osi, ts)
@@ -141,8 +142,8 @@ def get_moment_curvature(axial_load=0, max_curve=0.15, num_incr=100):
 
     o3.system.BandGeneral(osi)
     o3.numberer.Plain(osi)
-    o3.constraints.Plain(osi)
-    o3.test.NormUnbalance(osi, tol=1.0e-9, max_iter=10)
+    o3.constraints.Transformation(osi)
+    o3.test.NormUnbalance(osi, tol=1.0e-8, max_iter=10)
     o3.algorithm.Newton(osi)
     o3.integrator.LoadControl(osi, incr=0.0)
     o3.analysis.Static(osi)
@@ -151,40 +152,30 @@ def get_moment_curvature(axial_load=0, max_curve=0.15, num_incr=100):
     #
     ts = o3.time_series.Linear(osi)
     o3.pattern.Plain(osi, ts)
-    o3.Load(osi, n2, load_values=[0.0, 0.0, 1.0])
 
-    d_cur = max_curve / num_incr
-
-    o3.integrator.DisplacementControl(osi, n2, o3.cc.DOF2D_ROTZ, d_cur, 1, d_cur, d_cur)
+    d_cur = 3 * max_curve / num_incr
+    #
+    variable_disp_cont = 0
+    if variable_disp_cont:
+        o3.Load(osi, n2, load_values=[0.0, 0.0, 1.0])
+        o3.integrator.DisplacementControl(osi, n2, o3.cc.DOF2D_ROTZ, d_cur, 30, 0.01 * d_cur, 2 * d_cur)
+    else:
+        o3.SP(osi, n2, o3.cc.DOF2D_ROTZ, dof_values=[d_cur])
+        o3.integrator.LoadControl(osi, incr=1)
     o3.analyze(osi, num_incr)
     o3.wipe(osi)
-    curvature = nd.collect()
-    moment = -nm.collect()
-    return moment, curvature, mom_crack, mom_yield
+    rot = ndr.collect()
+    ele_curvature = ecr.collect()[:, 0]  # This is not curvature - not sure how to get curvature for zero length!?
+
+    moment = -nmr.collect()
+    return moment, ele_curvature, mom_crack, mom_yield
 
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
 
-    mom, curve, mom_crack, mom_yield = get_moment_curvature()
-    plt.plot(curve, mom/1000, label="Moment Curvature Analysis")
-    
-    plt.legend()
-    
-    mom_list = mom.tolist()
-    curve_list = curve.tolist()
-    
-    mom_list = mom.tolist()
-    # np.savetxt('m_curv_opensees.csv', mom_list, delimiter=',')
-    
-    curve_list = curve.tolist()
-    # np.savetxt('m_curv_opensees_v420.csv', (mom_list, curve_list), fmt='%.4e', delimiter=',')# X is an array
-    
-    print("Moments:", mom_list)
-    print("Curvature:", curve_list)
-    
-    
-    
+    mom, curve, mom_crack, mom_yield = get_moment_curvature(num_incr=4000, max_curve=0.05)
+
     m_cr = mom_crack
     m_y = mom_yield
     m_ult = mom[-1]/1000
@@ -195,9 +186,19 @@ if __name__ == '__main__':
     # plt.axhline(m_y, c="orange", label="Yield Moment (Hand Calc)")
     # plt.axhline(m_ult, c="red", label="Ultimate Moment")
     
-    plt.plot()
+    plt.plot(curve, mom)
+
+    fpc = 17.2e6  # Conc compressive strength (Pa)
+    Ec = 5000 * (fpc ** 0.5) * 1E3
+    d = 0.6  # section depth (mm)
+    b = 0.15  # section width (mm)
+    ei_el = Ec * b * d ** 3 / 12
+    moms = np.array([0, 60e3])
+    curvs = moms / ei_el
+    plt.plot(curvs, moms, c='k')
+
     plt.grid()
-    axes = plt.axes()
+    axes = plt.gca()
     axes.set_xlabel("Curvature [1/m]")
     axes.set_ylabel("Bending Moment [kNm]")
     axes.legend()
