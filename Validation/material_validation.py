@@ -144,6 +144,68 @@ def add_mander_model_unconf_concrete_to_plot(ax, fpc, Ec, eco, espall, dels, lab
 
             
     ax.plot(ec, fcu_list, label=label)
+ 
+def raynor(ax, Es, fy, fsu, esh, esu, dels, C1, Ey, label="Raynor"):
+    """
+
+    :param Es:
+    :param fy:
+    :param fsu:
+    :param esh:
+    :param esu:
+    :param dels: delta strain for default material models
+    :param C1: defines strain hardening curve in the Raynor model [2-6]
+    :param Ey: # slope of the yield plateau (MPa)
+    :return:
+    """
+    es = np.linspace(0, esu, int(esu / dels + 1))
+    fs = es * 0
+    ey = fy / Es;
+    fsh = fy + (esh - ey) * Ey
+    
+    es_list = []
+    fs_list = []
+
+    for i in range(len(es)):
+        if es[i] < ey:
+            fs[i] = Es * es[i]
+
+        if es[i] >= ey and es[i] <= esh:
+            fs[i] = fy + (es[i] - ey) * Ey
+
+        if es[i] > esh:
+            fs[i] = fsu - (fsu - fsh) * (((esu - es[i]) / (esu - esh)) ** C1)
+
+    return es, fs
+    es_list.append(es)
+    fs_list.append(fs)
+    
+    
+
+
+    print("es/fs:", es, fs)
+    ax.plot(es_list, fs_list, label=label)
+
+
+def king(ax, Es, fy, fsu, esh, esu, dels, label="King"):
+    r = esu - esh
+    m = ((fsu / fy) * ((30 * r + 1) ** 2) - 60 * r - 1) / (15 * (r ** 2))
+    es = np.linspace(0, esu, int(esu / dels + 1))
+    fs = es * 0
+    ey = fy / Es
+
+    for i in range(len(es)):
+        if es[i] < ey:
+            fs[i] = Es * es[i]
+        if es[i] >= ey and es[i] <= esh:
+            fs[i] = fy
+        if es[i] > esh:
+            fs[i] = ((m * (es[i] - esh) + 2) / (60 * (es[i] - esh) + 2) + (es[i] - esh) * (60 - m) / (
+                        2 * ((30 * r + 1) ** 2))) * fy
+
+    return es, fs
+    ax.plot(es, fs, label=label)
+
 
 
 
@@ -174,6 +236,12 @@ def create():
     wi = [0, 0, 0, 0] #Vector with clear distances between - use zero for automatic calc using mander model
     dels = 0.0001 #Delta strain for default material models (0.0001)
     
+    fsu = 450 #MPa
+    esh = 0.008  # long steel strain for strain hardening (usually 0.008)*
+    esu = 0.10  # long. steel maximum strain (usually ~0.10-0.15)*
+    Ey = 350  # slope of the yield plateau (MPa)
+    C1 = 3.5  # defines strain hardening curve in the Raynor model [2-6]
+    
     
     
     bf, ax = plt.subplots(nrows=2, sharex='col')
@@ -181,7 +249,11 @@ def create():
     add_conf_concrete_to_plot(ax[0], fpc, eps_conf_conc_max, eps_conc_crush_conf, Ec)
     add_mander_model_conf_concrete_to_plot(ax[0], fpc, dels, eco, esm, s, Dh, clb, Ast, fy, Ec, wi, b, d, ncx, ncy)
     add_mander_model_unconf_concrete_to_plot(ax[0], fpc, Ec, eco, espall, dels) #This passes the variables to the relevant function
+    
+       #Add steel models to plot
     add_rebar_to_plot(ax[1], fy, Es)
+    king(ax[1], Es, fy, fsu, esh, esu, dels)
+    raynor(ax[1], Es, fy, fsu, esh, esu, dels, C1, Ey)
     
     ax[0].set_ylabel('Stress [MPa]')
     ax[1].set_ylabel('Stress [MPa]')
