@@ -1,5 +1,12 @@
 # -*- coding: utf-8 -*-
 """
+Created on Wed Dec 21 11:20:20 2022
+
+@author: mda153
+"""
+
+# -*- coding: utf-8 -*-
+"""
 Created on Wed Dec 14 15:27:35 2022
 
 @author: mda153
@@ -29,7 +36,8 @@ def get_moment_curvature(axial_load=0, max_curve=0.15, num_incr=100):
     print("EC:",Ec)
     d_bar = 0.012 # longtitudinal bar diameter [m]
     total_num_bars = 4
-    Ast = np.pi*(d_bar/2)**2*total_num_bars #Total area of longtitudinal steel (m^2)
+    Ast = np.pi*(d_bar/2)**2*total_num_bars
+    # print(Ast)#Total area of longtitudinal steel (m^2)
     Dh = 0.006 #diameter of transverse reinforcement (m)
     clb = 0.044 #cover to longtitudinal bars (m)
     s = 0.3 #spacing of transverse steel (m)
@@ -69,7 +77,7 @@ def get_moment_curvature(axial_load=0, max_curve=0.15, num_incr=100):
     mom_yield = (n_bars_tens*bar_area*fy*j*d_eff)/1000
     print("mom_yeild:", mom_yield)
     
-    conc_conf = o3.uniaxial_material.Concrete04(osi, fc=-fpc, epsc=-eps_conf_conc_max, epscu=-eps_conc_crush_conf, ec=Ec, fct=ft, et=0) #confined concrete properties
+    conc_conf = o3.uniaxial_material.Concrete04(osi, fc=-fpc, epsc=-eps_conf_conc_max, epscu=-eps_conc_crush_conf, ec=Ec, fct=ft ,et=0) #confined concrete properties
     conc_unconf = o3.uniaxial_material.Concrete04(osi, fc=-fpc, epsc=-eps_unconf_conc_max, epscu=-eps_conc_crush_unconf, ec=Ec, fct=ft, et=0) #unconfined concrte properties
     rebar = o3.uniaxial_material.Steel01(osi, fy=fy, e0=Es, b=0.0015) #Steel reinforcing properties
 
@@ -79,10 +87,10 @@ def get_moment_curvature(axial_load=0, max_curve=0.15, num_incr=100):
     b = b #Section width
     cover = clb #Cover depth
     gj = 1.0E10 # Is this G * J? 
-    nf_core_y = 40
-    nf_core_z = 40
-    nf_cover_y = 50
-    nf_cover_z = 50
+    nf_core_y = 8
+    nf_core_z = 8
+    nf_cover_y = 10
+    nf_cover_z = 10
     n_bars = 2 #Number of bars in a layer/row
     bars_total = 4
     bar_area = Ast/bars_total #Area of steel (m^2)
@@ -95,7 +103,7 @@ def get_moment_curvature(axial_load=0, max_curve=0.15, num_incr=100):
     core_z = edge_z - cover
 
     sect = o3.section.Fiber(osi, gj=gj)
-    # define the core patch
+    # define the core fibre element patch
     o3.patch.Quad(osi, conc_conf, nf_core_z, nf_core_y,  # core, counter-clockwise (diagonals at corners)
                   crds_i=[-core_y, core_z],
                   crds_j=[-core_y, -core_z],
@@ -134,6 +142,8 @@ def get_moment_curvature(axial_load=0, max_curve=0.15, num_incr=100):
     o3.layer.Straight(osi, rebar, remaining_bars, bar_area,
                       start=[core_y - spacing_y, -core_z],
                       end=[-core_y + spacing_y, -core_z])
+    
+    #define element and nodes
 
     n1 = o3.node.Node(osi, 0.0, 0.0)
     n2 = o3.node.Node(osi, 0.0, 1)
@@ -144,15 +154,19 @@ def get_moment_curvature(axial_load=0, max_curve=0.15, num_incr=100):
     ele = o3.element.DispBeamColumn(osi, [n1, n2], transf=transf, integration=integ)
 
     # ele = o3.element.ZeroLengthSection(osi, [n1, n2], sect)
-
+    
+#Recording analysis results at nodes
     ndr = o3.recorder.NodeToArrayCache(osi, n2, dofs=[3], res_type='disp')
     nmr = o3.recorder.NodeToArrayCache(osi, n1, dofs=[3], res_type='reaction')
     ecr = o3.recorder.ElementToArrayCache(osi, ele, arg_vals=['deformation'])
 
+#Define constant axial load
     ts = o3.time_series.Constant(osi)
     o3.pattern.Plain(osi, ts)
     o3.Load(osi, n2, load_values=[axial_load, 0.0, 0.0])
-
+    
+    
+#Define analysis parameters
     o3.system.BandGeneral(osi)
     o3.numberer.Plain(osi)
     o3.constraints.Transformation(osi)
@@ -162,10 +176,10 @@ def get_moment_curvature(axial_load=0, max_curve=0.15, num_incr=100):
     o3.analysis.Static(osi)
     o3.analyze(osi, 1)
 
-    #
+#Define reference moment ...
     ts = o3.time_series.Linear(osi)
     o3.pattern.Plain(osi, ts)
-
+#Computing curvaure increments
     d_cur = max_curve / num_incr
     #
     variable_disp_cont = 0
@@ -181,6 +195,21 @@ def get_moment_curvature(axial_load=0, max_curve=0.15, num_incr=100):
     # ele_curvature = ecr.collect()[:, 0]  # Not sure if this is actually curvature.
 
     moment = -nmr.collect()
+    
+    #Estimate yield curvature
+    
+    rho_long = Ast/(b*d_eff) #Longtitudinal reinforcement ratio
+    # print(rho_long)
+    n = Es/Ec #Modular ratio
+    k = np.sqrt((rho_long**2*n**2) + (2*rho_long*n)) - (rho_long*n) #Ratio of depth to N.A., Pujol et. al.
+    # print(k)
+    
+    
+    esp_yeild = fy/Es #Yeild strain
+    curv_yeild = esp_yeild/((1-k)*d_eff) #Estimated yeild curvature
+    print("Estimated yeild curvature:", curv_yeild)
+    
+    
     return moment, rot, mom_crack, mom_yield
 
 
