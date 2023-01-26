@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 import sfsimodels as sm
 
 from matplotlib import rc
-rc('font', family='Helvetica', size=9, weight='light')
+rc('font', family='Times', size=9, weight='light')
 plt.rcParams['pdf.fonttype'] = 42
 
 
